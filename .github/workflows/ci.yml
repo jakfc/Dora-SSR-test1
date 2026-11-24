@@ -1,0 +1,37 @@
+name: 素材校验
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  assets:
+    name: Assets.ts 与素材同步
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 校验代码引用的资源 id 都已登记
+        run: python tools/lint_assets.py
+
+      - name: 对照表文档与 Assets.ts 是否同步
+        run: |
+          python tools/gen_asset_table.py
+          if ! git diff --quiet docs/素材替换对照表.md; then
+            echo "::error::docs/素材替换对照表.md 与 src/config/Assets.ts 不一致，请本地执行 python tools/gen_asset_table.py 后提交"
+            git --no-pager diff --stat docs/素材替换对照表.md
+            exit 1
+          fi
+
+      - name: 检查是否误提交了构建产物
+        run: |
+          if git ls-files '*.lua' | grep .; then
+            echo "::error::仓库里不应包含 .lua（TS 编译产物）：$(git ls-files '*.lua' | head -5 | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "OK：没有提交 .lua"
