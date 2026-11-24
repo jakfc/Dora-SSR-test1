@@ -1,8 +1,9 @@
-import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
+import { Color, DrawNode, Label, Node, Size, Vec2 } from 'Dora';
 import { SceneManager } from 'src/scenes/SceneManager';
 import { GameConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Screen } from 'src/config/Screen';
+import { artStretch } from 'src/config/Assets';
 import { createButton } from 'src/ui/HudLayer';
 
 function drawRect(
@@ -35,16 +36,28 @@ export function GameOverScene(isVictory: boolean): Node.Type {
 	const oy = Screen.offsetY;
 
 	const bg = DrawNode();
-	drawRect(bg, 0, 0, W, H, isVictory ? 0xff1b2a38 : 0xff221619);
-	drawRect(
-		bg,
-		ox + 220,
-		oy + 110,
-		840,
-		500,
-		0xdd1a202c,
-		isVictory ? 0xfff6e05e : 0xffe53e3e
-	);
+	// 结算底图（胜利 / 失败各一张）；有图就铺满屏，没图退回程序化底色 + 面板
+	const overBg = artStretch(isVictory ? 'over_victory' : 'over_defeat', W, H);
+	if (overBg !== undefined) {
+		overBg.anchor = Vec2(0, 0);
+		overBg.x = 0;
+		overBg.y = 0;
+		overBg.size = Size(W, H);
+		scene.addChild(overBg);
+		// 压暗一层，保证文字可读
+		drawRect(bg, 0, 0, W, H, 0x8a10141c);
+	} else {
+		drawRect(bg, 0, 0, W, H, isVictory ? 0xff1b2a38 : 0xff221619);
+		drawRect(
+			bg,
+			ox + 220,
+			oy + 110,
+			840,
+			500,
+			0xdd1a202c,
+			isVictory ? 0xfff6e05e : 0xffe53e3e
+		);
+	}
 	scene.addChild(bg);
 
 	const title = Label('sarasa-mono-sc-regular', 44) as Label.Type;

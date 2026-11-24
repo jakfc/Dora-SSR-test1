@@ -3,6 +3,7 @@ import { GameConfig } from 'src/config/GameConfig';
 import { TowerState } from 'src/config/GameState';
 import { Enemy } from 'src/entities/Enemy';
 import { artHide, artInto, artSprite } from 'src/config/Assets';
+import { playFx } from 'src/ui/Fx';
 
 interface Projectile {
 	x: number;
@@ -89,7 +90,9 @@ export class DefenseTower {
 
 		// 石砌敌台底座 + 箭楼/炮位
 		// 有美术素材时用精灵替掉程序化炮台
-		const towerArt = artInto(this.artNode, this.state.type === 'CANNON' ? 'tower_cannon' : 'tower_arrow');
+		// 有美术素材时用精灵替掉程序化炮台（2 级换升级版贴图）
+		const baseArt = this.state.type === 'CANNON' ? 'tower_cannon' : 'tower_arrow';
+		const towerArt = artInto(this.artNode, this.state.level >= 2 ? `${baseArt}_lv2` : baseArt);
 		if (towerArt === undefined) {
 			drawRect(this.bodyDraw, -28, 0, 56, 105, 0xff4a5568, 0xffa0aec0);
 		}
@@ -194,6 +197,16 @@ export class DefenseTower {
 	}
 
 	private applyImpact(p: Projectile, enemies: Enemy[]): void {
+		// 箭矢 / 炮弹落点炸开一下（素材缺失则什么都不画）
+		playFx(
+			this.node.parent,
+			p.isCannon ? 'fx_cannon_hit' : 'fx_arrow_hit',
+			p.targetX,
+			GameConfig.GROUND_Y + (p.isCannon ? 38 : 58),
+			0.3,
+			0.35,
+			0
+		);
 		if (p.splashRadius > 0) {
 			for (const e of enemies) {
 				if (!e.dead && Math.abs(e.x - p.targetX) <= p.splashRadius) {

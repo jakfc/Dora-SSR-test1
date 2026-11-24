@@ -1,8 +1,8 @@
-import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
+import { Color, DrawNode, Label, Node, Sprite, Vec2 } from 'Dora';
 import { EnemyType, GameConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Villager } from 'src/entities/Villager';
-import { artInto } from 'src/config/Assets';
+import { artInto, artStretch } from 'src/config/Assets';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -30,6 +30,7 @@ export class Enemy {
 	private readonly bodyDraw: DrawNode.Type;
 	private readonly nameLabel: Label.Type;
 	private readonly artNode: Node.Type;
+	private readonly barBgArt: Sprite.Type | undefined;
 
 	public x: number;
 	public hp: number;
@@ -56,6 +57,17 @@ export class Enemy {
 		this.artNode = Node();
 		this.node.addChild(this.artNode);
 
+		// 血条底框（e10 是空心边框，内部透明，程序化填色从后面透出来）
+		const barW = cfg.width + 12;
+		const barBg = artStretch('ui_bar_empty', barW, 10);
+		if (barBg !== undefined) {
+			barBg.anchor = Vec2(0, 0);
+			barBg.x = -barW / 2;
+			barBg.y = cfg.height + 3;
+			this.node.addChild(barBg);
+		}
+		this.barBgArt = barBg;
+
 		this.nameLabel = Label('sarasa-mono-sc-regular', type === 'BOSS' ? 16 : 12) as Label.Type;
 		this.nameLabel.text = type === 'SCOUT' ? '倭探' : cfg.name;
 		this.nameLabel.color = Color(type === 'BOSS' ? 0xfffeb2b2 : 0xffe2e8f0);
@@ -76,9 +88,11 @@ export class Enemy {
 			// 倭刀朝左指示
 			drawRect(this.bodyDraw, -hw - 16, cfg.height * 0.45, 16, 4, 0xffe2e8f0);
 		}
-		// 血条
+		// 血条（有底框素材时只画填充，底框由 e10 提供）
 		const pct = Math.max(0, this.hp / this.maxHp);
-		drawRect(this.bodyDraw, -hw - 4, cfg.height + 5, cfg.width + 8, 5, 0xff2d3748);
+		if (this.barBgArt === undefined) {
+			drawRect(this.bodyDraw, -hw - 4, cfg.height + 5, cfg.width + 8, 5, 0xff2d3748);
+		}
 		drawRect(this.bodyDraw, -hw - 4, cfg.height + 5, (cfg.width + 8) * pct, 5, 0xffe53e3e);
 	}
 

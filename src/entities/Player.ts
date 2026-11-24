@@ -3,6 +3,7 @@ import { GameConfig, LandmarkId } from 'src/config/GameConfig';
 import { Enemy } from 'src/entities/Enemy';
 import { Villager } from 'src/entities/Villager';
 import { artFace, artInto } from 'src/config/Assets';
+import { playFx } from 'src/ui/Fx';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -185,6 +186,17 @@ export class Player {
 		this.auraTimer = GameConfig.PLAYER.auraDuration;
 		this.slashFxTimer = 0.22;
 		this.moveTargetX = undefined;
+		// 刀光：贴在身体前方，朝左时自动镜像
+		playFx(
+			this.node.parent,
+			'fx_slash',
+			this.x + this.facing * 46,
+			GameConfig.GROUND_Y + 52,
+			0.26,
+			0.35,
+			0,
+			this.facing < 0
+		);
 
 		const oldX = this.x;
 		this.x = Math.max(

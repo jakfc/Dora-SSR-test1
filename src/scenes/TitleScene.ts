@@ -56,8 +56,10 @@ export function TitleScene(): Node.Type {
 	}
 	scene.addChild(bg);
 
-	// 美术贴图：夜空铺底 + 大罗山剪影 + 城墙地面（全缺时保留上面的程序化水墨）
-	const backdrop = artStretch('sky_night', W, H);
+	// 美术贴图：封面大图优先；没有封面就用夜色天空铺底 + 大罗山剪影 + 城墙地面
+	// （连夜空都没有时保留上面的程序化水墨）
+	const cover = artStretch('title_bg', W, H);
+	const backdrop = cover !== undefined ? cover : artStretch('sky_night', W, H);
 	if (backdrop !== undefined) {
 		backdrop.anchor = Vec2(0, 0);
 		backdrop.x = 0;
@@ -65,6 +67,8 @@ export function TitleScene(): Node.Type {
 		backdrop.size = Size(W, H);
 		scene.addChild(backdrop);
 		bg.clear();
+	}
+	if (cover === undefined) {
 		for (let i = 0; i < Math.ceil(W / 1280); i++) {
 			artAt(scene, 'horizon', i * 1280, 140);
 		}

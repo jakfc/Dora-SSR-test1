@@ -56,17 +56,30 @@ export const ART: Record<string, ArtSpec> = {
 	'ground_beach': { path: 'assets/bg/d05_ground_beach.png', w: 640, h: 160, stretch: true, ax: 0, ay: 0 },
 	'horizon': { path: 'assets/bg/d06_horizon_silhouette.png', w: 1280, h: 160, stretch: true, ax: 0, ay: 0 },
 
+	// 中景村舍 / 标题封面 / 结算画面
+	'mid_houses': { path: 'assets/bg/d08_mid_houses.png', w: 1280, h: 160, stretch: true, ax: 0, ay: 0 },
+	'title_bg': { path: 'assets/bg/d09_title_bg.png', stretch: true, ax: 0, ay: 0 },
+	'over_victory': { path: 'assets/bg/d10_victory.png', stretch: true, ax: 0, ay: 0 },
+	'over_defeat': { path: 'assets/bg/d11_defeat.png', stretch: true, ax: 0, ay: 0 },
+
 	// ---------- 地标建筑 ----------
 	'lm_ANCESTRAL_HALL': { path: 'assets/buildings/b01_shrine.png', w: 180, padBottom: 0.011 },
+	'lm_ANCESTRAL_HALL_lv2': { path: 'assets/buildings/b01_shrine_lv2.png', w: 180, padBottom: 0.011 },
 	'lm_PADDY_FIELD': { path: 'assets/buildings/b02_paddy.png', w: 220, padBottom: 0.045 },
 	'lm_SALT_OFFICE': { path: 'assets/buildings/b03_salt_office.png', w: 170 },
-	'lm_INNER_GATE': { path: 'assets/buildings/b04_inner_water_gate.png', w: 130, padBottom: 0.011 },
+	'lm_INNER_GATE': { path: 'assets/buildings/b04_inner_water_gate.png', w: 130, padBottom: 0.003 },
+	'lm_INNER_GATE_broken': { path: 'assets/buildings/b04_inner_water_gate_broken.png', w: 130, padBottom: 0.003 },
 	'lm_MAIN_WALL': { path: 'assets/buildings/b05_main_wall.png', w: 180 },
 	'lm_EAST_GATE': { path: 'assets/buildings/b06_east_gate_barbican.png', w: 140, padBottom: 0.009 },
 	// 东门开启后的状态：把画布上半部分裁掉
 	'lm_EAST_GATE_open': { path: 'assets/buildings/b06_east_gate_barbican.png', w: 140, padBottom: 0.009, cropTop: 0.47 },
-	'tower_arrow': { path: 'assets/buildings/b07_tower_arrow.png', w: 72, padBottom: 0.019 },
+	// 城门被攻破（耐久归零）后的破损态
+	'lm_EAST_GATE_broken': { path: 'assets/buildings/b06_east_gate_broken.png', w: 140, padBottom: 0.009 },
+	// 敌台：lv1 是低矮炮台、lv2 画布更宽更高，按可见内容同宽折算保持像素比例
+	'tower_arrow': { path: 'assets/buildings/b07_tower_arrow.png', w: 72 },
 	'tower_cannon': { path: 'assets/buildings/b08_tower_cannon.png', w: 72, padBottom: 0.019 },
+	'tower_arrow_lv2': { path: 'assets/buildings/b07_tower_arrow_lv2.png', w: 93 },
+	'tower_cannon_lv2': { path: 'assets/buildings/b08_tower_cannon_lv2.png', w: 77 },
 
 	// 远景与城外（位置已留好，丢文件即可生效；缺文件时仍用色块）
 	'lm_DALUO_MOUNTAIN': { path: 'assets/bg/b09_daluo_mountain.png', h: 380 },
@@ -88,8 +101,8 @@ export const ART: Record<string, ArtSpec> = {
 	// ---------- 投射物 / 掉落物 / 特效 ----------
 	'proj_arrow': { path: 'assets/sprites/props/proj_arrow.png', h: 10, ay: 0.5 },
 	'proj_cannonball': { path: 'assets/sprites/props/proj_cannonball.png', h: 14, ay: 0.5 },
-	'tool_hoe': { path: 'assets/sprites/tools/tool_hoe.png', h: 26, padTop: 0.042, padBottom: 0.042 },
-	'tool_shovel': { path: 'assets/sprites/tools/tool_shovel.png', h: 26, padTop: 0.042, padBottom: 0.042 },
+	'tool_hoe': { path: 'assets/sprites/tools/tool_hoe.png', h: 26, padTop: 0.188, padBottom: 0.042 },
+	'tool_shovel': { path: 'assets/sprites/tools/tool_shovel.png', h: 26, padTop: 0.083, padBottom: 0.042 },
 	'tool_hammer': { path: 'assets/sprites/tools/tool_hammer.png', h: 26, padTop: 0.042, padBottom: 0.042 },
 	'tool_spear': { path: 'assets/sprites/tools/tool_spear.png', h: 26, padTop: 0.042, padBottom: 0.042 },
 	'tool_manual': { path: 'assets/sprites/tools/tool_manual.png', h: 26, padTop: 0.042, padBottom: 0.042 },
@@ -98,6 +111,13 @@ export const ART: Record<string, ArtSpec> = {
 	'fx_shockwave': { path: 'assets/sprites/props/fx_shockwave.png', w: 90, h: 18, stretch: true },
 	'fx_halo_loyalty': { path: 'assets/sprites/props/fx_halo_loyalty.png', w: 120, h: 120, stretch: true },
 	'fx_torch_glow': { path: 'assets/sprites/props/fx_torch_glow.png', w: 130, h: 130, stretch: true },
+
+	// 命中 / 施法特效
+	'fx_slash': { path: 'assets/sprites/props/fx_slash.png', w: 110, h: 110, stretch: true },
+	'fx_arrow_hit': { path: 'assets/sprites/props/fx_arrow_hit.png', w: 44, h: 44, stretch: true },
+	'fx_cannon_hit': { path: 'assets/sprites/props/fx_cannon_hit.png', w: 60, h: 60, stretch: true },
+	'fx_recruit': { path: 'assets/sprites/props/fx_recruit.png', h: 200 },
+	'fx_levelup': { path: 'assets/sprites/props/fx_levelup.png', h: 200 },
 
 	// ---------- HUD 底板 / 控件 ----------
 	'ui_top_bar': { path: 'assets/ui/e01_top_bar.png', stretch: true, ax: 0, ay: 0 },
@@ -111,6 +131,8 @@ export const ART: Record<string, ArtSpec> = {
 	'ui_bar_stamina': { path: 'assets/ui/e08_bar_stamina.png', stretch: true, ax: 0, ay: 0 },
 	'ui_prompt_bubble': { path: 'assets/ui/e09_prompt_bubble.png', stretch: true },
 	'ui_cursor': { path: 'assets/ui/e12_cursor.png', w: 24 },
+	'ui_bar_empty': { path: 'assets/ui/e10_bar_empty.png', w: 64, h: 8, stretch: true },
+	'ui_boss_bar': { path: 'assets/ui/e11_boss_bar.png', w: 600, h: 24, stretch: true },
 
 	// ---------- HUD 图标 ----------
 	'icon_day': { path: 'assets/ui/icons/icon_day.png', h: 22 },
@@ -132,6 +154,12 @@ export const ART: Record<string, ArtSpec> = {
 	'icon_role_builder': { path: 'assets/ui/icons/icon_role_builder.png', h: 22 },
 	'icon_role_militia': { path: 'assets/ui/icons/icon_role_militia.png', h: 22 },
 	'icon_role_kungfu': { path: 'assets/ui/icons/icon_role_kungfu.png', h: 22 },
+	// 地标可置办的工具图标（HUD 提示用）
+	'icon_tool_hoe': { path: 'assets/ui/icons/icon_tool_hoe.png', h: 22 },
+	'icon_tool_shovel': { path: 'assets/ui/icons/icon_tool_shovel.png', h: 22 },
+	'icon_tool_hammer': { path: 'assets/ui/icons/icon_tool_hammer.png', h: 22 },
+	'icon_tool_spear': { path: 'assets/ui/icons/icon_tool_spear.png', h: 22 },
+	'icon_tool_manual': { path: 'assets/ui/icons/icon_tool_manual.png', h: 22 },
 };
 
 /** 已经确认不存在的路径（避免每帧重复尝试加载）。 */

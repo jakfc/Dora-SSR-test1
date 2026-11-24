@@ -2,13 +2,14 @@ import { Color, DrawNode, KeyName, Keyboard, Label, Node, Size, Sprite, Vec2 } f
 import { SceneManager } from 'src/scenes/SceneManager';
 import { EnemyType, GameConfig, LandmarkId, VillagerRole } from 'src/config/GameConfig';
 import { Screen } from 'src/config/Screen';
-import { artAt, artStretch } from 'src/config/Assets';
+import { artAt, artInto, artStretch } from 'src/config/Assets';
 import { GameState } from 'src/config/GameState';
 import { DefenseTower } from 'src/entities/DefenseTower';
 import { Enemy } from 'src/entities/Enemy';
 import { Player } from 'src/entities/Player';
 import { ToolDrop, Villager } from 'src/entities/Villager';
 import { HudLayer } from 'src/ui/HudLayer';
+import { playFx, tickFx } from 'src/ui/Fx';
 
 interface ScavengeDrop {
 	x: number;
@@ -34,6 +35,14 @@ const TOOL_ART: Partial<Record<VillagerRole, string>> = {
 	BUILDER: 'tool_hammer',
 	MILITIA: 'tool_spear',
 	KUNG_FU: 'tool_manual',
+};
+
+/** 场上还活着的倭寇大将（给 HUD 显示血条用）。 */
+const findBoss = (list: Enemy[]): Enemy | undefined => {
+	for (const e of list) {
+		if (!e.dead && e.type === 'BOSS') return e;
+	}
+	return undefined;
 };
 
 function drawRect(
@@ -118,6 +127,13 @@ export function GameScene(): Node.Type {
 	}
 	midLayer.addChild(midDraw);
 
+	// 中景贴图：堡内村舍屋影，横向平铺盖住程序化色块
+	if (artAt(midLayer, 'mid_houses', 0, GameConfig.GROUND_Y) !== undefined) {
+		artAt(midLayer, 'mid_houses', 1280, GameConfig.GROUND_Y);
+		artAt(midLayer, 'mid_houses', 2560, GameConfig.GROUND_Y);
+		midDraw.clear();
+	}
+
 	// 主战场地面与地标建筑
 	const groundDraw = DrawNode();
 	drawRect(groundDraw, 0, 0, GameConfig.MAP_WIDTH, GameConfig.GROUND_Y, 0xff3b3026);
@@ -146,7 +162,7 @@ export function GameScene(): Node.Type {
 	const landmarkIds = Object.keys(GameConfig.MAP_LANDMARKS) as LandmarkId[];
 	for (const id of landmarkIds) {
 		const lm = GameConfig.MAP_LANDMARKS[id];
-		if (id !== 'EAST_GATE' && id !== 'INNER_GATE') {
+		if (id !== 'EAST_GATE' && id !== 'INNER_GATE' && id !== 'ANCESTRAL_HALL') {
 			// 有美术素材就摆精灵，否则退回方块
 			if (artAt(worldLayer, `lm_${id}`, lm.x, GameConfig.GROUND_Y) === undefined) {
 				drawRect(
@@ -172,9 +188,13 @@ export function GameScene(): Node.Type {
 	const gatesDraw = DrawNode();
 	worldLayer.addChild(gatesDraw);
 
-	// 城门贴图挂点（有素材时替代方块）
-	const gateArtNode = Node();
+	// 城门 / 宗祠贴图挂点（有素材时替代方块；同一挂点按状态切换 id，不会重复创建）
+	const gateArtNode = Node(); // 东门：闭门 / 开门 / 破损
+	const innerGateArtNode = Node(); // 内城水门：完好 / 破损
+	const shrineArtNode = Node(); // 王氏宗祠：1 级 / 2 级
+	worldLayer.addChild(innerGateArtNode);
 	worldLayer.addChild(gateArtNode);
+	worldLayer.addChild(shrineArtNode);
 
 	// 夜间火把光点
 	const torchDraw = DrawNode();
@@ -233,6 +253,7 @@ export function GameScene(): Node.Type {
 		const v = new Villager(x, role);
 		villagers.push(v);
 		worldLayer.addChild(v.node);
+		playFx(worldLayer, 'fx_recruit', x, GameConfig.GROUND_Y + 60, 0.5, 0.3, 16);
 	};
 	spawnVillager(360, 'IDLE');
 	spawnVillager(410, 'IDLE');
@@ -270,6 +291,7 @@ export function GameScene(): Node.Type {
 		worldLayer.addChild(tNode);
 		tools.push({ id: nextToolId++, x, role, claimed: false, node: tNode });
 		gs.toolsCrafted++;
+		playFx(worldLayer, 'fx_recruit', x, GameConfig.GROUND_Y + 60, 0.45, 0.25, 14);
 	};
 
 	const spawnDailyScavenges = () => {
@@ -328,8 +350,10 @@ export function GameScene(): Node.Type {
 		nightMaskDraw.clear();
 		torchDraw.clear();
 		gatesDraw.clear();
-		gateArtNode.removeAllChildren();
+		// 火把光晕用 artAt 直接创建，每次刷新前先清空，避免重复叠加
 		torchArtNode.removeAllChildren();
+		// 注意：城门 / 宗祠挂点用 artInto，靠节点 tag 判断是否已建过精灵，
+		// 这里千万不能 removeAllChildren，否则 tag 还在、精灵没了，城门会凭空消失。
 
 		// 天空色调（铺满整个可视区域）
 		const isDusk = gs.phase === 'DAY' && gs.dayTimer <= GameConfig.DUSK_WARNING_TIME;
@@ -362,10 +386,29 @@ export function GameScene(): Node.Type {
 			}
 		}
 
-		// 内城水门
+		// 王氏宗祠（升到 2 级后换用升级版贴图）
+		const hallLm = GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL;
+		shrineArtNode.x = hallLm.x;
+		shrineArtNode.y = GameConfig.GROUND_Y;
+		const hallArtId = gs.ancestralHallLevel >= 2 ? 'lm_ANCESTRAL_HALL_lv2' : 'lm_ANCESTRAL_HALL';
+		if (artInto(shrineArtNode, hallArtId) === undefined) {
+			drawRect(
+				gatesDraw,
+				hallLm.x - hallLm.width / 2,
+				GameConfig.GROUND_Y,
+				hallLm.width,
+				hallLm.height,
+				hallLm.color,
+				0xffe2e8f0
+			);
+		}
+
+		// 内城水门（耐久归零后换成破损贴图）
 		const innerLm = GameConfig.MAP_LANDMARKS.INNER_GATE;
+		innerGateArtNode.x = innerLm.x;
+		innerGateArtNode.y = GameConfig.GROUND_Y;
 		if (gs.innerGateHp > 0) {
-			if (artAt(gateArtNode, 'lm_INNER_GATE', innerLm.x, GameConfig.GROUND_Y) === undefined) {
+			if (artInto(innerGateArtNode, 'lm_INNER_GATE') === undefined) {
 				drawRect(
 					gatesDraw,
 					innerLm.x - innerLm.width / 2,
@@ -376,7 +419,7 @@ export function GameScene(): Node.Type {
 					0xffe2e8f0
 				);
 			}
-		} else {
+		} else if (artInto(innerGateArtNode, 'lm_INNER_GATE_broken') === undefined) {
 			drawRect(
 				gatesDraw,
 				innerLm.x - innerLm.width / 2,
@@ -387,20 +430,26 @@ export function GameScene(): Node.Type {
 			);
 		}
 
-		// 东门瓮城（开/闭形态）
+		// 东门瓮城（开 / 闭 / 破损三态）
 		const eastLm = GameConfig.MAP_LANDMARKS.EAST_GATE;
 		if (gs.eastGateHp <= 0) {
-			drawRect(
-				gatesDraw,
-				eastLm.x - eastLm.width / 2,
-				GameConfig.GROUND_Y,
-				eastLm.width,
-				36,
-				0xff2d3748
-			);
+			gateArtNode.x = eastLm.x;
+			gateArtNode.y = GameConfig.GROUND_Y;
+			if (artInto(gateArtNode, 'lm_EAST_GATE_broken') === undefined) {
+				drawRect(
+					gatesDraw,
+					eastLm.x - eastLm.width / 2,
+					GameConfig.GROUND_Y,
+					eastLm.width,
+					36,
+					0xff2d3748
+				);
+			}
 		} else if (gs.eastGateOpen) {
 			// 开启状态：仅上方门楼，下方通行
-			if (artAt(gateArtNode, 'lm_EAST_GATE_open', eastLm.x, GameConfig.GROUND_Y + 90) === undefined) {
+			gateArtNode.x = eastLm.x;
+			gateArtNode.y = GameConfig.GROUND_Y + 90;
+			if (artInto(gateArtNode, 'lm_EAST_GATE_open') === undefined) {
 				drawRect(
 					gatesDraw,
 					eastLm.x - eastLm.width / 2,
@@ -413,7 +462,9 @@ export function GameScene(): Node.Type {
 			}
 		} else {
 			// 关闭状态：全封闭瓮城铁门
-			if (artAt(gateArtNode, 'lm_EAST_GATE', eastLm.x, GameConfig.GROUND_Y) === undefined) {
+			gateArtNode.x = eastLm.x;
+			gateArtNode.y = GameConfig.GROUND_Y;
+			if (artInto(gateArtNode, 'lm_EAST_GATE') === undefined) {
 				drawRect(
 					gatesDraw,
 					eastLm.x - eastLm.width / 2,
@@ -473,10 +524,12 @@ export function GameScene(): Node.Type {
 					hud.showToast(`升级宗祠需 ${cost} 白银！`, 2.0);
 					return;
 				}
-				gs.ancestralHallLevel++;
-				gs.ancestralHallMaxHp += 300;
-				gs.ancestralHallHp = Math.min(gs.ancestralHallMaxHp, gs.ancestralHallHp + 300);
-				hud.showToast(`宗祠升至 Lv.${gs.ancestralHallLevel}，人口上限提升至 ${gs.maxPopulation}！`, 2.5);
+		gs.ancestralHallLevel++;
+		gs.ancestralHallMaxHp += 300;
+		gs.ancestralHallHp = Math.min(gs.ancestralHallMaxHp, gs.ancestralHallHp + 300);
+		refreshEnvironmentVisuals();
+		playFx(worldLayer, 'fx_levelup', GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x, GameConfig.GROUND_Y + 90, 0.65, 0.35, 24);
+		hud.showToast(`宗祠升至 Lv.${gs.ancestralHallLevel}，人口上限提升至 ${gs.maxPopulation}！`, 2.5);
 				return;
 			}
 
@@ -518,6 +571,7 @@ export function GameScene(): Node.Type {
 					}
 					innerTower.state.unlocked = true;
 					innerTower.refreshVisual();
+					playFx(worldLayer, 'fx_levelup', innerTower.state.x, GameConfig.GROUND_Y + 90, 0.65, 0.35, 24);
 					hud.showToast('内城佛郎机炮台已建成！', 2.5);
 				} else {
 					const cost = GameConfig.TOWER_STATS.CANNON.upgradeCost;
@@ -624,9 +678,18 @@ export function GameScene(): Node.Type {
 	// 主循环 update 调度
 	scene.schedule((dt: number) => {
 		const clampedDt = Math.min(dt, 0.05);
+		tickFx(clampedDt);
 
 		if (waitingVictoryModal) {
-			hud.update(clampedDt, player.findNearestLandmark(), enemies.length);
+			const boss = findBoss(enemies);
+			hud.update(
+				clampedDt,
+				player.findNearestLandmark(),
+				enemies.length,
+				boss !== undefined ? boss.hp : 0,
+				boss !== undefined ? boss.maxHp : 0,
+				boss !== undefined ? GameConfig.ENEMIES.BOSS.name : ''
+			);
 			return false;
 		}
 
@@ -812,7 +875,15 @@ export function GameScene(): Node.Type {
 			hud.showVictoryModal(wave);
 		}
 
-		hud.update(clampedDt, nearestLandmark, enemies.length);
+		const nightBoss = findBoss(enemies);
+		hud.update(
+			clampedDt,
+			nearestLandmark,
+			enemies.length,
+			nightBoss !== undefined ? nightBoss.hp : 0,
+			nightBoss !== undefined ? nightBoss.maxHp : 0,
+			nightBoss !== undefined ? GameConfig.ENEMIES.BOSS.name : ''
+		);
 		return false;
 	});
 

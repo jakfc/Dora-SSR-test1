@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Size, Sprite, Vec2 } from 'Dora';
 import { GameConfig, LandmarkId, NightWaveConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Screen } from 'src/config/Screen';
-import { artAt, artStretch } from 'src/config/Assets';
+import { artAt, artHide, artInto, artSprite, artStretch } from 'src/config/Assets';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -27,7 +27,8 @@ export function createButton(
 	h: number,
 	bgColor: number,
 	onClick: () => void,
-	fontSize = 15
+	fontSize = 15,
+	iconId: string | undefined = undefined
 ): Node.Type {
 	const btn = Node();
 	btn.size = Size(w, h);
@@ -51,6 +52,18 @@ export function createButton(
 	lbl.x = w / 2;
 	lbl.y = h / 2;
 	btn.addChild(lbl);
+
+	// 按钮左侧的工具小图标（有素材才显示）
+	if (iconId !== undefined) {
+		const icon = artSprite(iconId);
+		if (icon !== undefined) {
+			icon.anchor = Vec2(0, 0.5);
+			icon.x = 10;
+			icon.y = h / 2;
+			btn.addChild(icon);
+			lbl.x = w / 2 + 13;
+		}
+	}
 
 	btn.onTapEnded(() => {
 		onClick();
@@ -103,6 +116,13 @@ export class HudLayer {
 	private readonly silverLabel: Label.Type;
 	private readonly foodLabel: Label.Type;
 	private readonly popLabel: Label.Type;
+	// 工具小图标（提示条左侧）与 BOSS 血条
+	private readonly hintIconNode: Node.Type;
+	private readonly bossBar: Node.Type;
+	private readonly bossBgArt: Sprite.Type | undefined;
+	private readonly bossFill: DrawNode.Type;
+	private readonly bossLabel: Label.Type;
+	private bossWidth = 600;
 
 	private toastTimer = 0;
 	private currentLandmark: LandmarkId | undefined = undefined;
@@ -192,6 +212,33 @@ export class HudLayer {
 		this.controlsLabel.color = Color(0xffa0aec0);
 		this.controlsLabel.text = '操作：[A/D]或方向键/点击地面移动   [E] 十八号包干交互   [J] 王家拳·麒麟步   [K] 鸣鼓集结';
 		this.node.addChild(this.controlsLabel);
+
+		// 提示条左侧的工具图标挂点（水田→锄头、盐课司→盐铲）
+		this.hintIconNode = Node();
+		this.hintIconNode.visible = false;
+		this.node.addChild(this.hintIconNode);
+
+		// 倭寇大将血条（顶栏下方居中，无 BOSS 时隐藏）
+		this.bossBar = Node();
+		this.bossBar.visible = false;
+		this.node.addChild(this.bossBar);
+
+		this.bossFill = DrawNode();
+		this.bossBar.addChild(this.bossFill);
+
+		this.bossBgArt = artStretch('ui_boss_bar', 600, 24);
+		if (this.bossBgArt !== undefined) {
+			this.bossBgArt.anchor = Vec2(0, 0);
+			this.bossBgArt.x = -300;
+			this.bossBgArt.y = 0;
+			this.bossBar.addChild(this.bossBgArt);
+		}
+
+		this.bossLabel = Label('sarasa-mono-sc-regular', 15) as Label.Type;
+		this.bossLabel.anchor = Vec2(0.5, 0.5);
+		this.bossLabel.color = Color(0xfffefcbf);
+		this.bossLabel.y = 12;
+		this.bossBar.addChild(this.bossLabel);
 
 		// 底部右侧技能快捷按钮
 		const btnE = createButton('[E] 交互', 92, 38, 0xff2f855a, () => this.callbacks.onInteract(0), 14);
@@ -319,8 +366,20 @@ export class HudLayer {
 
 		this.hintLabel.x = 20;
 		this.hintLabel.y = 48;
+		this.hintIconNode.x = 16;
+		this.hintIconNode.y = 48;
+		if (this.hintIconNode.visible) this.hintLabel.x = 48;
 		this.controlsLabel.x = 20;
 		this.controlsLabel.y = 20;
+
+		// BOSS 血条：随窗口宽度自适应，居中贴在顶栏下方
+		this.bossWidth = Math.min(600, w - 240);
+		this.bossBar.x = w / 2;
+		this.bossBar.y = h - TOP_BAR_HEIGHT - 30;
+		if (this.bossBgArt !== undefined) {
+			this.bossBgArt.size = Size(this.bossWidth, 24);
+			this.bossBgArt.x = -this.bossWidth / 2;
+		}
 
 		const rightEdge = w - 320;
 		for (let i = 0; i < this.skillButtons.length; i++) {
@@ -373,7 +432,14 @@ export class HudLayer {
 		this.victoryModal.visible = true;
 	}
 
-	public update(dt: number, nearestLandmark: LandmarkId | undefined, enemyCount: number): void {
+	public update(
+		dt: number,
+		nearestLandmark: LandmarkId | undefined,
+		enemyCount: number,
+		bossHp = 0,
+		bossMaxHp = 0,
+		bossName = ''
+	): void {
 		if (this.toastTimer > 0) {
 			this.toastTimer = Math.max(0, this.toastTimer - dt);
 			if (this.toastTimer === 0) {
@@ -417,6 +483,36 @@ export class HudLayer {
 		} else {
 			this.hintLabel.text = '沿永昌堡巡视防务：前往宗祠募丁、水田/盐课司造具、东门控制闸门。';
 		}
+
+		// 提示条上的工具图标：水田→锄头、盐课司→盐铲
+		const toolIconId =
+			nearestLandmark === 'PADDY_FIELD'
+				? 'icon_tool_hoe'
+				: (nearestLandmark === 'SALT_OFFICE' ? 'icon_tool_shovel' : undefined);
+		if (toolIconId === undefined) {
+			artHide(this.hintIconNode);
+		} else {
+			artInto(this.hintIconNode, toolIconId);
+		}
+		this.hintLabel.x = this.hintIconNode.visible ? 48 : 20;
+
+		// BOSS 血条：仅在大将存活时显示
+		const bossAlive = bossMaxHp > 0 && bossHp > 0;
+		this.bossBar.visible = bossAlive;
+		if (bossAlive) {
+			const ratio = Math.max(0, Math.min(1, bossHp / bossMaxHp));
+			this.bossFill.clear();
+			drawRect(
+				this.bossFill,
+				-this.bossWidth / 2 + 3,
+				3,
+				(this.bossWidth - 6) * ratio,
+				18,
+				0xffe53e3e,
+				0xff7b341e
+			);
+			this.bossLabel.text = `${bossName}  ${Math.ceil(bossHp)}/${bossMaxHp}`;
+		}
 	}
 
 	private rebuildExtraButtons(landmark: LandmarkId | undefined): void {
@@ -430,14 +526,14 @@ export class HudLayer {
 			this.extraActionNode.addChild(b1);
 			this.extraActionNode.addChild(b2);
 		} else if (landmark === 'INNER_GATE') {
-			const b1 = createButton('置办木锤 (70银)', 155, 34, 0xffdd6b20, () => this.callbacks.onInteract(0), 13);
+			const b1 = createButton('置办木锤 (70银)', 155, 34, 0xffdd6b20, () => this.callbacks.onInteract(0), 13, 'icon_tool_hammer');
 			const b2 = createButton('解锁内城炮台 (150银)', 180, 34, 0xff4a5568, () => this.callbacks.onInteract(1), 13);
 			b2.x = 165;
 			this.extraActionNode.addChild(b1);
 			this.extraActionNode.addChild(b2);
 		} else if (landmark === 'MAIN_WALL') {
-			const b1 = createButton('置办长枪 (75银)', 155, 34, 0xff3182ce, () => this.callbacks.onInteract(0), 13);
-			const b2 = createButton('置办拳谱 (110银)', 165, 34, 0xffe53e3e, () => this.callbacks.onInteract(1), 13);
+			const b1 = createButton('置办长枪 (75银)', 155, 34, 0xff3182ce, () => this.callbacks.onInteract(0), 13, 'icon_tool_spear');
+			const b2 = createButton('置办拳谱 (110银)', 165, 34, 0xffe53e3e, () => this.callbacks.onInteract(1), 13, 'icon_tool_manual');
 			b2.x = 165;
 			this.extraActionNode.addChild(b1);
 			this.extraActionNode.addChild(b2);
