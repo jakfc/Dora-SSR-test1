@@ -221,15 +221,25 @@ export function GameScene(): Node.Type {
 		worldLayer.addChild(seaDraw);
 
 		// 地物碎屑层：按种子撒在滩涂与堡内地面上，压掉贴图的等距节拍
-		if (artReady('ground_decals')) {
+		// 每件碎屑是一张独立小图（石块 / 草簇 / 贝壳 / 木屑），随机挑、随机缩放与透明度。
+		const decalIds = [
+			'ground_decal_01',
+			'ground_decal_02',
+			'ground_decal_03',
+			'ground_decal_04',
+			'ground_decal_05',
+			'ground_decal_06',
+		].filter((id) => artReady(id));
+		if (decalIds.length > 0) {
 			const decalNode = Node();
 			worldLayer.addChild(decalNode);
-			for (let i = 0; i < Math.floor(GameConfig.MAP_WIDTH / 130); i++) {
+			for (let i = 0; i < Math.floor(GameConfig.MAP_WIDTH / 110); i++) {
 				const dx = 40 + groundRand(i * 1.7) * (GameConfig.MAP_WIDTH - 80);
 				if (dx < westSeaEnd || dx > eastSeaStart) continue;
 				// 只贴在地平线附近，别飘到天上去
-				const dy = GameConfig.GROUND_Y - 6 - groundRand(i * 2.9) * 44;
-				const node = artAt(decalNode, 'ground_decals', dx, dy);
+				const dy = GameConfig.GROUND_Y - 4 - groundRand(i * 2.9) * 52;
+				const pick = decalIds[Math.floor(groundRand(i * 3.3) * decalIds.length)];
+				const node = pick !== undefined ? artAt(decalNode, pick, dx, dy) : undefined;
 				if (node === undefined) continue;
 				// 每处随机镜像 + 随机缩放 + 随机透明度，看上去就不是同一张图
 				const flip = groundRand(i * 4.1) < 0.5 ? -1 : 1;

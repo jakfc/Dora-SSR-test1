@@ -62,7 +62,13 @@ export const ART: Record<string, ArtSpec> = {
 	'ground_beach_c': { path: 'assets/bg/d05_ground_beach_c.png', w: 640, h: 160, stretch: true, ax: 0, ay: 0 },
 	'ground_city_b': { path: 'assets/bg/d04_ground_fortress_b.png', w: 640, h: 160, stretch: true, ax: 0, ay: 0 },
 	// 地面碎屑（碎石 / 草丛 / 贝壳），透明底，随机撒在地面上打断重复感
-	'ground_decals': { path: 'assets/bg/d12_ground_decals.png', w: 640, h: 96, stretch: true, ax: 0, ay: 0 },
+	// 地面碎屑：单张小地物（石块 / 草簇 / 贝壳 / 木屑），散在滩涂上打散铺装的等距节拍
+	'ground_decal_01': { path: 'assets/sprites/props/decal_rock_01.png', h: 10 },
+	'ground_decal_02': { path: 'assets/sprites/props/decal_rock_02.png', h: 7 },
+	'ground_decal_03': { path: 'assets/sprites/props/decal_grass_01.png', h: 14 },
+	'ground_decal_04': { path: 'assets/sprites/props/decal_grass_02.png', h: 11 },
+	'ground_decal_05': { path: 'assets/sprites/props/decal_shell_01.png', h: 6 },
+	'ground_decal_06': { path: 'assets/sprites/props/decal_wood_01.png', h: 8 },
 	'horizon': { path: 'assets/bg/d06_horizon_silhouette.png', w: 1280, h: 160, stretch: true, ax: 0, ay: 0 },
 
 	// 中景村舍 / 标题封面 / 结算画面
