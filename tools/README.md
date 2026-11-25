@@ -1,7 +1,7 @@
 # tools 目录说明
 
-这些脚本都是「改代码 / 换素材之后自检」用的，不参与游戏运行。全部用系统 Python 3（需要 `Pillow`：
-`pip install pillow`）。命令都在**项目根目录**执行。
+这些脚本都是「改代码 / 换素材之后自检」用的，不参与游戏运行。全部用系统 Python 3
+（需要 `Pillow`、`numpy`、`scipy`：`pip install pillow numpy scipy`）。命令都在**项目根目录**执行。
 
 | 脚本 | 干什么 | 什么时候跑 |
 | --- | --- | --- |
@@ -16,7 +16,7 @@
 | `generate_all_assets.py` | 早期批量生成占位素材的脚本（保留做参考） | 基本不用 |
 | `generate_missing_abc.py`、`redraw_yongchang_assets.py` | 生成 / 重画 A/B/C 组素材的脚本（保存 prompt 与参数） | 想重跑生成时 |
 | `process_gemini_sprites.py`、`process_flow_batch.py` | 把外部生成的大图切帧、去背、缩放成项目要的尺寸 | 拿到 AI 生成的新图之后 |
-| `regen_bg_ai.py` | 重出背景层（天空 / 地面 / 远景）的生成脚本（保存 prompt 与后处理参数） | 想重画背景时 |
+| `regen_bg_ai.py` | 重出背景层（天空 / 地面 / 远景）：白底抠图 → 去白边 → 边缘补色 → 1x + `@2x`。已有原图时加 `--post` 可以**只重跑后处理、不重新调 AI**（改抠图/裁切参数后常用） | 想重画背景、或重新处理手头的背景原图时 |
 | `redo_all_walks_from_video.py` | 从参考视频逐帧抽出行走动作，对齐底座后写成 6 帧 `*_walk_01..06.png`（1x + @2x） | 想重做/加帧行走动画时 |
 
 ## 常用自检流程（换素材之后）
