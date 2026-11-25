@@ -392,6 +392,7 @@ export class Villager {
 			if (this.saltTimer >= GameConfig.SALT_FETCH.gatherSeconds) {
 				this.saltTimer = 0;
 				this.carrying = true;
+				soundSfx('farm_hoe');
 				this.refreshVisual();
 				ctx.onSaltGathered(this.x);
 			}

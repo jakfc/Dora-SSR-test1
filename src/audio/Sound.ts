@@ -63,7 +63,7 @@ const SFX_GAP: Record<string, number> = {
 	hurt: 0.22,
 	enemy_die: 0.05,
 	coin_silver: 0.1,
-	ui_hover: 0.05,
+	ui_hover: 0.25,
 };
 const SFX_GAP_DEFAULT = 0.05;
 

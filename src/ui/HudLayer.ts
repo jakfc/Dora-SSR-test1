@@ -66,6 +66,8 @@ export function createButton(
 		}
 	}
 
+	// 悬停轻触（sfx_ui_hover 很短，靠 SFX_GAP 限流，不会连成一片）
+	btn.onMouseMove(() => soundSfx('ui_hover'));
 	btn.onTapEnded(() => {
 		soundSfx('ui_click');
 		onClick();
@@ -310,6 +312,7 @@ export class HudLayer {
 			btnM.addChild(bg);
 		}
 		btnM.addChild(muteLabel);
+		btnM.onMouseMove(() => soundSfx('ui_hover'));
 		btnM.onTapEnded(() => {
 			const muted = soundToggleMuted();
 			muteLabel.text = muted ? '音×' : '音♪';
