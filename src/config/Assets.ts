@@ -116,6 +116,12 @@ export const PERSON_TARGET: Record<string, number> = {
 	'lm_EAST_GATE_lv2': 6.6,
 	'lm_EAST_GATE_lv3': 7.2,
 	'gate_portcullis': 1.75,
+	// 码头：桥面比人略高，桩子插在水里，总高约 3 人
+	// 栈桥是低矮的水上平台：连桩带面 2 人高（比人高一点，人才走得上去）
+	'lm_pier_W': 2.05,
+	'lm_pier_E': 2.05,
+	'lm_pier_W_broken': 2.05,
+	'lm_pier_E_broken': 2.05,
 };
 
 /** 取某资产的目标身高（人）；不在表里的返回 0 表示不参与对账。 */
@@ -196,6 +202,12 @@ export const ART: Record<string, ArtSpec> = {
 	'tower_cannon_lv2': { path: 'assets/buildings/b08_tower_cannon_lv2.png', w: 153 },
 	// 东西海岸登陆点（同一张滩头图，摆在两头）
 	'lm_coast': { path: 'assets/bg/b11_coast.png', w: 300 },
+	// 两头的倭寇码头：完好时贼船靠岸，拆了就只剩散兵
+	// 码头：id 必须跟 GameScene 的 `lm_pier_${side}` 对上（side 是 W/E）
+	'lm_pier_W': { path: 'assets/buildings/b13_pier.png', w: 150 },
+	'lm_pier_E': { path: 'assets/buildings/b13_pier.png', w: 150 },
+	'lm_pier_W_broken': { path: 'assets/buildings/b13_pier_broken.png', w: 150 },
+	'lm_pier_E_broken': { path: 'assets/buildings/b13_pier_broken.png', w: 150 },
 
 	// ---------- 角色 ----------
 	'player_idle': { path: 'assets/sprites/player/player_idle_01.png', h: 54, padTop: 0.042, padBottom: 0.042 },

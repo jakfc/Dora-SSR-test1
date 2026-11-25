@@ -36,7 +36,10 @@ export type LandmarkId =
 	| 'EAST_GATE'
 	| 'EAST_PADDY'
 	| 'EAST_SALT_FLAT'
-	| 'EAST_COAST';
+	| 'EAST_COAST'
+	// 两头的倭寇码头：建起来才有鬼子上岸，被拆了就只来散兵
+	| 'WEST_PIER'
+	| 'EAST_PIER';
 
 export interface LandmarkConfig {
 	id: LandmarkId;
@@ -56,11 +59,29 @@ export interface FogZoneConfig {
 	id: string;
 	name: string;
 	/** 迷雾区中心世界坐标 */
-	x: number;
-	/** 迷雾区宽度 */
+	x: number;	/** 迷雾区宽度 */
 	width: number;
 	/** 开局是否已亮（城堡核心区是亮的） */
 	startRevealed?: boolean;
+}
+
+/** 两头倭寇码头（被打塔 → 那一侧只剩散兵） */
+export interface PierConfig {
+	MAX_HP: number;
+	OFFSET_WEST: number;
+	OFFSET_EAST: number;
+	SABOTAGE_DAMAGE: number;
+	REPAIR_AMOUNT: number;
+	LANDING_BONUS_COUNT: number;
+	BROKEN_SIDE_RATIO: number;
+	REVENGE_DELAY_SECONDS: number;
+	REVENGE_COUNT: number;
+	// 旧字段（保留兼容）：语义同 SABOTAGE_DAMAGE / REPAIR_AMOUNT，
+	// REPAIR_SILVER 是主角修栈桥一次要花的银两。
+	HIT_HP: number;
+	REPAIR_HP: number;
+	REPAIR_SILVER: number;
+	SQUAD_PER_FULL_PIER: number;
 }
 
 export interface RoleConfig {
@@ -269,6 +290,33 @@ export const GameConfig = {
 	INNER_GATE_DEFENSE_X: 2280,
 
 	EAST_GATE_BASE_HP: 800,
+
+	// ---- 两头的倭寇码头 ----
+	// 倭船就泊在这里。码头被打塌（HP=0）：那一侧只剩散兵零星摸上来；
+	// 只要码头还在，夜暂时那一侧的人就是成建制上岸。
+	PIER: {
+		MAX_HP: 180,
+		// 码头美术相对交互点往海里让多少：让到「栈桥右端正好接上岸线」为止
+		// （岸线 = 西 600 / 东 7000，码头贴图宽 220，所以让 70 刚好贴岸）
+		OFFSET_WEST: 70,
+		OFFSET_EAST: 70,
+		// 主角拆码头一下多少伤害 / 修一次补多少
+		SABOTAGE_DAMAGE: 45,
+		REPAIR_AMOUNT: 60,
+		// 码头完好时，从这一侧上岸的额外兵力（相当于「码头运兵」）
+		LANDING_BONUS_COUNT: 2,
+		// 码头没了以后，这一侧只留多少比例的原波次（剩下的是散兵）
+		BROKEN_SIDE_RATIO: 0.35,
+		// 码头被拆后，多久（秒）对方会补一次拆后报复的散兵
+		REVENGE_DELAY_SECONDS: 25,
+		// 每砸一锤欠下的血债（人）；拆断那一刻再额外记 REVENGE_COUNT 人
+		REVENGE_COUNT: 3,
+		// 旧字段保留（有老代码引用），语义同 SABOTAGE_DAMAGE / REPAIR_AMOUNT
+		HIT_HP: 45,
+		REPAIR_HP: 60,
+		REPAIR_SILVER: 2,
+		SQUAD_PER_FULL_PIER: 3,
+	} as PierConfig,
 	EAST_GATE_UPGRADE_BASE_COST: 8,
 	EAST_GATE_MAX_LEVEL: 3,
 	EAST_GATE_DEFENSE_X: 3380,
@@ -500,6 +548,30 @@ export const GameConfig = {
 			color: 0xff1e4e79,
 			description: '倭寇船只夜袭登岸之所，黑夜降临时倭寇由此涌来。',
 			interactHint: '东海前哨，严防倭寇夜袭。',
+		},
+		// 两头的栈桥码头：倭寇靠岸下人的地方。
+		// 拆了它，对面就只剩没码头的散兵摸上来；修回来，成建制的贼船又会靠岸。
+		WEST_PIER: {
+			id: 'WEST_PIER',
+			name: '西滩倭寇码头',
+			subtitle: '贼船靠岸的栈桥',
+			x: 560,
+			width: 220,
+			height: 150,
+			color: 0xff4a3b28,
+			description: '西面这一段栈桥一直留着没动：贼船靠在这里，鬼子从这里下滩。',
+			interactHint: '栈桥好好的，西边的贼船会成建制上来；把它拆了就只剩散兵。',
+		},
+		EAST_PIER: {
+			id: 'EAST_PIER',
+			name: '东滩倭寇码头',
+			subtitle: '贼船靠岸的栈桥',
+			x: 7040,
+			width: 220,
+			height: 150,
+			color: 0xff4a3b28,
+			description: '东面这一段栈桥一直留着没动：贼船靠在这里，鬼子从这里下滩。',
+			interactHint: '栈桥好好的，东边的贼船会成建制上来；把它拆了就只剩散兵。',
 		},
 	} as Record<LandmarkId, LandmarkConfig>,
 

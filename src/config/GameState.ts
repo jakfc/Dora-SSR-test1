@@ -85,6 +85,46 @@ export class GameState {
 	public eastGateHp = GameConfig.EAST_GATE_BASE_HP;
 	public eastGateOpen = true;
 
+	// ---- 两头的倭寇码头 ----
+	// 血量 > 0 就是栈桥还好好的：那一侧的贼船能靠岸、夜暂成建制。
+	// 被打到 0 就是栈桥断了：那一侧只能来散兵。修回来又变成建制夜暂。
+	public pierMaxHp = GameConfig.PIER.MAX_HP;
+	public westPierHp = GameConfig.PIER.MAX_HP;
+	public eastPierHp = GameConfig.PIER.MAX_HP;
+
+	public pierHpOf(side: 'W' | 'E'): number {
+		return side === 'W' ? this.westPierHp : this.eastPierHp;
+	}
+
+	public setPierHp(side: 'W' | 'E', hp: number): void {
+		const clamped = Math.max(0, Math.min(this.pierMaxHp, Math.round(hp)));
+		if (side === 'W') this.westPierHp = clamped;
+		else this.eastPierHp = clamped;
+	}
+
+	/** 这一侧还有没有能靠船的码头 */
+	public pierAlive(side: 'W' | 'E'): boolean {
+		return this.pierHpOf(side) > 0;
+	}
+
+	/**
+	 * 拆码头欠下的血债：入夜后这一侧要额外还回来的人数。
+	 * 砸一锤记 1 人，拆断那一刻再额外记 REVENGE_COUNT 人。
+	 */
+	public pierRevenge = { W: 0, E: 0 };
+
+	public addPierRevenge(side: 'W' | 'E', count: number): void {
+		if (count <= 0) return;
+		this.pierRevenge[side] += count;
+	}
+
+	/** 取走并清零某一侧的报复人数 */
+	public takePierRevenge(side: 'W' | 'E'): number {
+		const n = this.pierRevenge[side];
+		this.pierRevenge[side] = 0;
+		return n;
+	}
+
 	public towers: TowerState[] = [];
 
 	// 营建工程与招募队列
@@ -139,6 +179,11 @@ export class GameState {
 		this.eastGateMaxHp = GameConfig.EAST_GATE_BASE_HP;
 		this.eastGateHp = GameConfig.EAST_GATE_BASE_HP;
 		this.eastGateOpen = true;
+
+		this.pierMaxHp = GameConfig.PIER.MAX_HP;
+		this.pierRevenge = { W: 0, E: 0 };
+		this.westPierHp = GameConfig.PIER.MAX_HP;
+		this.eastPierHp = GameConfig.PIER.MAX_HP;
 
 		this.towers = GameConfig.TOWER_SLOTS.map((slot) => {
 			const stats = GameConfig.TOWER_STATS[slot.defaultType];

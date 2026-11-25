@@ -390,6 +390,10 @@ export function GameScene(): Node.Type {
 			const lv = gs.eastGateLevel;
 			return lv <= 1 ? 'lm_EAST_GATE' : `lm_EAST_GATE_lv${lv}`;
 		}
+		if (id === 'WEST_PIER' || id === 'EAST_PIER') {
+			const side = id === 'WEST_PIER' ? 'W' : 'E';
+			return gs.pierAlive(side) ? `lm_pier_${side}` : `lm_pier_${side}_broken`;
+		}
 		if (id === 'WEST_COAST' || id === 'EAST_COAST') return 'lm_coast';
 		const lmCfg = GameConfig.MAP_LANDMARKS[id];
 		if (lmCfg.reclaimable === 'PADDY') return `lm_paddy_lv${gs.landLevelOf(id)}`;
@@ -1170,6 +1174,47 @@ export function GameScene(): Node.Type {
 				});
 			}
 		}
+		// —— 码头状态直接决定这一夜从哪一侧上来多少人 ——
+		// 栈桥完好：那一侧成建制上岸，还额外多运一船人（LANDING_BONUS_COUNT）。
+		// 栈桥被砸断：那一侧掉到散兵比例（BROKEN_SIDE_RATIO）。
+		// 拆过码头：欠下的血债当夜就从那一侧摸黑还回来（每锤 1 人，拆断再补 REVENGE_COUNT 人）。
+		for (const side of ['W', 'E'] as ('W' | 'E')[]) {
+			const sideName = side === 'W' ? '西' : '东';
+			const alive = gs.pierAlive(side);
+			const revenge = gs.takePierRevenge(side);
+			if (alive) {
+				// 码头完好：多运一船人（从这一侧上岸）
+				const bonus = GameConfig.PIER.LANDING_BONUS_COUNT;
+				const type: 'SCOUT' | 'SAMURAI' = gs.day >= 4 ? 'SAMURAI' : 'SCOUT';
+				for (let i = 0; i < bonus; i++) {
+					spawnQueue.push({ enemyType: type, triggerTime: 1.2 + i * 0.5, side });
+				}
+			} else {
+				// 码头断了：这一侧的贼兵按比例打散，剩下的才是摸上来的散兵
+				const pile = spawnQueue.filter((q) => q.side === side);
+				const keep = Math.max(0, Math.round(pile.length * GameConfig.PIER.BROKEN_SIDE_RATIO));
+				let drop = pile.length - keep;
+				if (drop > 0) {
+					spawnQueue = spawnQueue.filter((q) => {
+						if (q.side !== side || drop <= 0) return true;
+						drop--;
+						return false;
+					});
+					hud.showToast(`码头没了：${sideName}岸只摸上来 ${keep} 个散兵。`, 2.4);
+				}
+			}
+			if (revenge > 0) {
+				// 砸过的码头会讨债：债主是这一侧的贼众
+				const type: 'SCOUT' | 'SAMURAI' = gs.day >= 4 ? 'SAMURAI' : 'SCOUT';
+				for (let i = 0; i < revenge; i++) {
+					spawnQueue.push({ enemyType: type, triggerTime: 0.8 + i * 0.7, side });
+				}
+				hud.showToast(
+					`${sideName}岸火把连成一条线：砸码头的账，今夜连本带利 ${revenge} 个人回来！`,
+					3.2
+				);
+			}
+		}
 		refreshEnvironmentVisuals();
 	};
 
@@ -1443,6 +1488,47 @@ export function GameScene(): Node.Type {
 		const landmark = player.findNearestLandmark();
 		if (!landmark) {
 			hud.showToast('请靠近宗祠、民居、水田、盐田、盐课司、内城水门、主城墙、东门或滩头后再交互', 2.0);
+			return;
+		}
+
+		// 两头的倭寇码头：完好时那一侧成建制上岸（还会多运一船人），
+		// 拆了那一侧只剩散兵摸上来；但砸一锤记一个人头债，当夜就连本带利还回来。
+		if (landmark === 'WEST_PIER' || landmark === 'EAST_PIER') {
+			const side: 'W' | 'E' = landmark === 'WEST_PIER' ? 'W' : 'E';
+			const sideName = side === 'W' ? '西' : '东';
+			const pierX = GameConfig.MAP_LANDMARKS[landmark].x;
+			if (gs.pierAlive(side)) {
+				const before = gs.pierHpOf(side);
+				const after = Math.max(0, before - GameConfig.PIER.SABOTAGE_DAMAGE);
+				gs.setPierHp(side, after);
+				gs.addPierRevenge(side, 1);
+				playFx(worldLayer, 'fx_arrow_hit', pierX, GameConfig.GROUND_Y + 40, 0.25, 0.3, 8);
+				pulseArtAtX(pierX, 0.05, 0.2);
+				soundSfx('build_hammer');
+				if (after <= 0) {
+					gs.addPierRevenge(side, GameConfig.PIER.REVENGE_COUNT);
+					refreshEnvironmentVisuals();
+					hud.showToast(
+						`【${sideName}滩倭寇码头】栈桥断成两截！${sideName}岸从此只上散兵，但砸桥的账今夜会来讨。`,
+						3.0
+					);
+				} else {
+					hud.showToast(`栈桥 ${after}/${gs.pierMaxHp}，再砸几下就断。`, 1.6);
+				}
+			} else {
+				const cost = GameConfig.PIER.REPAIR_SILVER;
+				if (!gs.spendSilver(cost)) {
+					hud.showToast(`修栈桥要 ${cost} ${GameConfig.SILVER_NAME}，库里不够。`, 1.8);
+					return;
+				}
+				gs.setPierHp(side, gs.pierHpOf(side) + GameConfig.PIER.REPAIR_AMOUNT);
+				refreshEnvironmentVisuals();
+				playFx(worldLayer, 'fx_levelup', pierX, GameConfig.GROUND_Y + 40, 0.6, 0.3, 20);
+				hud.showToast(
+					`${sideName}岸栈桥复工：贼船又能靠岸（那一侧也会多运一船人上来）。`,
+					2.6
+				);
+			}
 			return;
 		}
 
