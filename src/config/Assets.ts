@@ -48,6 +48,82 @@ export interface ArtSpec {
 	flipX?: boolean;
 }
 
+/**
+ * 人高基准：所有立在地上的东西，高度都用「人」为单位标注。
+ * 1 人 = 50 设计像素（族丁 villager_* 的画布高）。
+ * 这张表就是「美术素材和人的对应关系」，改素材时照它量，别凭手感。
+ */
+export const PERSON_H = 50;
+
+/**
+ * 各资产相对人的身高目标值（单位：人）。
+ * 只用管世界里的立物；UI/图标不参与。
+ * `tools/audit_person_scale.py` 会拿实测值跟这里对账，差值超过 0.2 人就算不合格。
+ */
+export const PERSON_TARGET: Record<string, number> = {
+	// 人：基准
+	'villager_IDLE': 1.0,
+	'villager_FARMER': 1.0,
+	'villager_SALT_WORKER': 1.0,
+	'villager_BUILDER': 1.0,
+	'villager_MILITIA': 1.0,
+	'villager_KUNG_FU': 1.0,
+	// 王叔杲是主角，比族丁高半个头
+	'player_idle': 1.08,
+	// 贼兵：斥候跟人差不多，武士高一头，头目要压人一头
+	'enemy_SCOUT': 1.04,
+	'enemy_SAMURAI': 1.24,
+	'enemy_BOSS': 1.64,
+	// 农具／道具：不得高过人的胸口（0.55）
+	'tool_hoe': 0.52,
+	'tool_shovel': 0.52,
+	'tool_hammer': 0.52,
+	'tool_spear': 0.52,
+	'tool_manual': 0.52,
+	'salvage_driftwood': 0.48,
+	'salvage_salt_bag': 0.48,
+	// 田：贴地，只到人膝盖
+	'lm_paddy_lv0': 0.7,
+	'lm_paddy_lv1': 0.7,
+	'lm_paddy_lv2': 0.7,
+	'lm_paddy_lv3': 0.7,
+	'lm_saltflat_lv0': 1.0,
+	'lm_saltflat_lv1': 1.0,
+	'lm_saltflat_lv2': 1.0,
+	'lm_saltflat_lv3': 1.0,
+	// 民居：草屋 2 人、砖房 2.5 人、楼房 3 人（人进门必须明显矮一截）
+	'lm_house_plot': 0.5,
+	'lm_house_lv1': 3.0,
+	'lm_house_lv2': 3.8,
+	'lm_house_lv3': 4.6,
+	// 城墙／箭塔：墙 3.2 人，塔 2.7~3.1 人
+	'lm_MAIN_WALL': 5.0,
+	'tower_arrow': 4.4,
+	'tower_cannon': 4.3,
+	'tower_arrow_lv2': 5.2,
+	'tower_cannon_lv2': 5.1,
+	// 官署／宗祠：3 人起步，升级逐级拔高
+	'lm_SALT_OFFICE': 3.8,
+	'lm_ANCESTRAL_HALL': 5.0,
+	'lm_ANCESTRAL_HALL_lv3': 6.4,
+	'lm_ANCESTRAL_HALL_lv4': 7.4,
+	'lm_ANCESTRAL_HALL_lv5': 8.4,
+	// 城门：门楼 4.36 人，门洞净空够两个人并排走
+	'lm_INNER_GATE': 5.4,
+	'lm_INNER_GATE_lv2': 6.0,
+	'lm_INNER_GATE_lv3': 6.6,
+	'lm_EAST_GATE': 6.0,
+	'lm_EAST_GATE_lv2': 6.6,
+	'lm_EAST_GATE_lv3': 7.2,
+	'gate_portcullis': 1.75,
+};
+
+/** 取某资产的目标身高（人）；不在表里的返回 0 表示不参与对账。 */
+export function personTarget(id: string): number {
+	const t = PERSON_TARGET[id];
+	return t === undefined ? 0 : t;
+}
+
 export const ART: Record<string, ArtSpec> = {
 	// ---------- 背景层 ----------
 	'sky_day': { path: 'assets/bg/d01_sky_day.png', stretch: true, ax: 0, ay: 0 },
@@ -78,29 +154,29 @@ export const ART: Record<string, ArtSpec> = {
 	'over_defeat': { path: 'assets/bg/d11_defeat.png', stretch: true, ax: 0, ay: 0 },
 
 	// ---------- 地标建筑：升级 = 换一座楼，每级都有独立模型 ----------
-	'lm_ANCESTRAL_HALL': { path: 'assets/buildings/b01_shrine.png', w: 180, padBottom: 0.011 },
-	'lm_ANCESTRAL_HALL_lv2': { path: 'assets/buildings/b01_shrine_lv2.png', w: 180, padBottom: 0.011 },
-	'lm_ANCESTRAL_HALL_lv3': { path: 'assets/buildings/b01_shrine_lv3.png', w: 196, padBottom: 0.011 },
-	'lm_ANCESTRAL_HALL_lv4': { path: 'assets/buildings/b01_shrine_lv4.png', w: 212, padBottom: 0.011 },
-	'lm_ANCESTRAL_HALL_lv5': { path: 'assets/buildings/b01_shrine_lv5.png', w: 232, padBottom: 0.011 },
-	'lm_SALT_OFFICE': { path: 'assets/buildings/b03_salt_office.png', w: 170 },
-	'lm_INNER_GATE': { path: 'assets/buildings/b04_inner_water_gate.png', w: 130, padBottom: 0.003 },
-	'lm_INNER_GATE_lv2': { path: 'assets/buildings/b04_inner_water_gate_lv2.png', w: 136, padBottom: 0.003 },
-	'lm_INNER_GATE_lv3': { path: 'assets/buildings/b04_inner_water_gate_lv3.png', w: 144, padBottom: 0.003 },
-	'lm_INNER_GATE_broken': { path: 'assets/buildings/b04_inner_water_gate_broken.png', w: 130, padBottom: 0.003 },
-	'lm_MAIN_WALL': { path: 'assets/buildings/b05_main_wall.png', w: 180 },
-	'lm_EAST_GATE': { path: 'assets/buildings/b06_east_gate_barbican.png', w: 140, padBottom: 0.009 },
+	'lm_ANCESTRAL_HALL': { path: 'assets/buildings/b01_shrine.png', w: 253, padBottom: 0.011 },
+	'lm_ANCESTRAL_HALL_lv2': { path: 'assets/buildings/b01_shrine_lv2.png', w: 283, padBottom: 0.011 },
+	'lm_ANCESTRAL_HALL_lv3': { path: 'assets/buildings/b01_shrine_lv3.png', w: 257, padBottom: 0.011 },
+	'lm_ANCESTRAL_HALL_lv4': { path: 'assets/buildings/b01_shrine_lv4.png', w: 239, padBottom: 0.011 },
+	'lm_ANCESTRAL_HALL_lv5': { path: 'assets/buildings/b01_shrine_lv5.png', w: 223, padBottom: 0.011 },
+	'lm_SALT_OFFICE': { path: 'assets/buildings/b03_salt_office.png', w: 215 },
+	'lm_INNER_GATE': { path: 'assets/buildings/b04_inner_water_gate.png', w: 185, padBottom: 0.003 },
+	'lm_INNER_GATE_lv2': { path: 'assets/buildings/b04_inner_water_gate_lv2.png', w: 176, padBottom: 0.003 },
+	'lm_INNER_GATE_lv3': { path: 'assets/buildings/b04_inner_water_gate_lv3.png', w: 165, padBottom: 0.003 },
+	'lm_INNER_GATE_broken': { path: 'assets/buildings/b04_inner_water_gate_broken.png', w: 185, padBottom: 0.003 },
+	'lm_MAIN_WALL': { path: 'assets/buildings/b05_main_wall.png', w: 281 },
+	'lm_EAST_GATE': { path: 'assets/buildings/b06_east_gate_barbican.png', w: 193, padBottom: 0.009 },
 	// 东门开启后的状态：把画布上半部分裁掉
-	'lm_EAST_GATE_open': { path: 'assets/buildings/b06_east_gate_barbican.png', w: 140, padBottom: 0.009, cropTop: 0.47 },
+	'lm_EAST_GATE_open': { path: 'assets/buildings/b06_east_gate_barbican.png', w: 193, padBottom: 0.009, cropTop: 0.47 },
 	// 城门被攻破（耐久归零）后的破损态
-	'lm_EAST_GATE_broken': { path: 'assets/buildings/b06_east_gate_broken.png', w: 140, padBottom: 0.009 },
-	'lm_EAST_GATE_lv2': { path: 'assets/buildings/b06_east_gate_lv2.png', w: 152, padBottom: 0.009 },
-	'lm_EAST_GATE_lv3': { path: 'assets/buildings/b06_east_gate_lv3.png', w: 166, padBottom: 0.009 },
+	'lm_EAST_GATE_broken': { path: 'assets/buildings/b06_east_gate_broken.png', w: 193, padBottom: 0.009 },
+	'lm_EAST_GATE_lv2': { path: 'assets/buildings/b06_east_gate_lv2.png', w: 181, padBottom: 0.009 },
+	'lm_EAST_GATE_lv3': { path: 'assets/buildings/b06_east_gate_lv3.png', w: 169, padBottom: 0.009 },
 	// 民居：每级一座（lv0 是空地地基）
-	'lm_house_plot': { path: 'assets/buildings/b12_house_plot.png', w: 84 },
-	'lm_house_lv1': { path: 'assets/buildings/b12_house_lv1.png', w: 76 },
-	'lm_house_lv2': { path: 'assets/buildings/b12_house_lv2.png', w: 90 },
-	'lm_house_lv3': { path: 'assets/buildings/b12_house_lv3.png', w: 104 },
+	'lm_house_plot': { path: 'assets/buildings/b12_house_plot.png', w: 43 },
+	'lm_house_lv1': { path: 'assets/buildings/b12_house_lv1.png', w: 139 },
+	'lm_house_lv2': { path: 'assets/buildings/b12_house_lv2.png', w: 187 },
+	'lm_house_lv3': { path: 'assets/buildings/b12_house_lv3.png', w: 230 },
 	// 水田：荒地 → 熟田，每级一张（东西两块水田共用）
 	'lm_paddy_lv0': { path: 'assets/buildings/b02_paddy_lv0.png', w: 190, padBottom: 0.045 },
 	'lm_paddy_lv1': { path: 'assets/buildings/b02_paddy.png', w: 190, padBottom: 0.045 },
@@ -112,12 +188,12 @@ export const ART: Record<string, ArtSpec> = {
 	'lm_saltflat_lv2': { path: 'assets/buildings/b10_saltflat_lv2.png', w: 470, padBottom: 0.03 },
 	'lm_saltflat_lv3': { path: 'assets/buildings/b10_saltflat_lv3.png', w: 470, padBottom: 0.03 },
 	// 东门闸门：可上下滑动的铁闸（闭门落下 / 开门升起），与城门楼分开画，开关才不割裂
-	'gate_portcullis': { path: 'assets/buildings/b06_east_gate_portcullis.png', w: 62 },
+	'gate_portcullis': { path: 'assets/buildings/b06_east_gate_portcullis.png', w: 68 },
 	// 敌台：lv1 是低矮炮台、lv2 画布更宽更高，按可见内容同宽折算保持像素比例
-	'tower_arrow': { path: 'assets/buildings/b07_tower_arrow.png', w: 72 },
-	'tower_cannon': { path: 'assets/buildings/b08_tower_cannon.png', w: 72, padBottom: 0.019 },
-	'tower_arrow_lv2': { path: 'assets/buildings/b07_tower_arrow_lv2.png', w: 93 },
-	'tower_cannon_lv2': { path: 'assets/buildings/b08_tower_cannon_lv2.png', w: 77 },
+	'tower_arrow': { path: 'assets/buildings/b07_tower_arrow.png', w: 117 },
+	'tower_cannon': { path: 'assets/buildings/b08_tower_cannon.png', w: 117, padBottom: 0.019 },
+	'tower_arrow_lv2': { path: 'assets/buildings/b07_tower_arrow_lv2.png', w: 156 },
+	'tower_cannon_lv2': { path: 'assets/buildings/b08_tower_cannon_lv2.png', w: 153 },
 	// 东西海岸登陆点（同一张滩头图，摆在两头）
 	'lm_coast': { path: 'assets/bg/b11_coast.png', w: 300 },
 

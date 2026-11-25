@@ -166,15 +166,18 @@ export function GameScene(): Node.Type {
 	}
 
 	// 主战场地面与地标建筑
-	// 地平线以下不再是一条厚土块：往下只留一条岸带，再往下全是水（水里映着上面的城）。
-	const WATER_TOP = GameConfig.GROUND_Y - GameConfig.WATER.SHORE_BAND;
+	// 地平线以上是陆地（人站的地方），地平线以下整片是水（水里映着上面的城）。
+	const WATER_TOP = GameConfig.GROUND_Y; // 水面线 = 地平线
+	const WATER_BOTTOM = Screen.height + 240; // 水一直画到屏幕外，滚动时不留缝
+	const WATER_H = WATER_BOTTOM - WATER_TOP;
+	const SHORE_Y = WATER_TOP - GameConfig.WATER.SHORE_BAND; // 岸带：水面线往上这一条
 	const groundDraw = DrawNode();
-	// 岸带：地平线往下 SHORE_BAND 这一条
-	drawRect(groundDraw, 0, WATER_TOP, GameConfig.MAP_WIDTH, GameConfig.WATER.SHORE_BAND, 0xff3b3026);
+	// 岸带：贴着水面的那一条湿沙地
+	drawRect(groundDraw, 0, SHORE_Y, GameConfig.MAP_WIDTH, GameConfig.WATER.SHORE_BAND, 0xff3b3026);
 	// 两头入海、中间堡城：西岸以西是海，西岸~内城水门是滩涂，
 	// 内城水门~东门之间是堡内石板路，东门~东岸又是滩涂，东岸以东复为海。
-	drawRect(groundDraw, 0, WATER_TOP, westSeaEnd, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
-	drawRect(groundDraw, eastSeaStart, WATER_TOP, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
+	drawRect(groundDraw, 0, SHORE_Y, westSeaEnd, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
+	drawRect(groundDraw, eastSeaStart, SHORE_Y, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
 	drawRect(groundDraw, westSeaEnd, GameConfig.GROUND_Y - 14, cityMinX - westSeaEnd, 14, 0xffb79f78);
 	drawRect(groundDraw, cityMaxX, GameConfig.GROUND_Y - 14, eastSeaStart - cityMaxX, 14, 0xffb79f78);
 	drawRect(groundDraw, cityMinX, GameConfig.GROUND_Y - 14, cityMaxX - cityMinX, 14, 0xff718096);
@@ -226,8 +229,8 @@ export function GameScene(): Node.Type {
 		groundDraw.clear();
 		// 两头海面重新盖回（铺贴图时不能让滩涂越界到海里）
 		const seaDraw = DrawNode();
-		drawRect(seaDraw, 0, WATER_TOP, westSeaEnd, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
-		drawRect(seaDraw, eastSeaStart, WATER_TOP, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
+		drawRect(seaDraw, 0, SHORE_Y, westSeaEnd, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
+		drawRect(seaDraw, eastSeaStart, SHORE_Y, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
 		worldLayer.addChild(seaDraw);
 
 		// 地物碎屑层：按种子撒在滩涂与堡内地面上，压掉贴图的等距节拍
@@ -266,6 +269,11 @@ export function GameScene(): Node.Type {
 	worldLayer.addChild(waterDraw);
 	const rippleDraw = DrawNode();
 	worldLayer.addChild(rippleDraw);
+	// 碎光层：水面零零星星的反光，一闪一闪
+	const glintDraw = DrawNode();
+	worldLayer.addChild(glintDraw);
+	// 所有倒影挂点：每帧轻微摆一下 scaleX，水面才有「晃」的感觉
+	const mirrorNodes: Node.Type[] = [];
 	let waterClock = 0;
 
 	/** 水位渐变：贴地平线处亮（远水反天光），越靠画面底部越深 */
@@ -273,15 +281,22 @@ export function GameScene(): Node.Type {
 		waterDraw.clear();
 		const deep = GameConfig.WATER.COLOR_DEEP;
 		const top = GameConfig.WATER.COLOR_TOP;
-		const steps = 10;
+		const steps = 12;
 		for (let i = 0; i < steps; i++) {
+			// 贴水面处取 top（远水反天光），越靠画面底部越深
 			const t = i / (steps - 1);
-			const r = Math.floor(((deep >>> 16) & 0xff) * (1 - t) + ((top >>> 16) & 0xff) * t);
-			const g = Math.floor(((deep >>> 8) & 0xff) * (1 - t) + ((top >>> 8) & 0xff) * t);
-			const b = Math.floor((deep & 0xff) * (1 - t) + (top & 0xff) * t);
-			const col = 0xff000000 | (r << 16) | (g << 8) | b;
-			const hStep = WATER_TOP / steps + 1;
-			drawRect(waterDraw, left, (WATER_TOP * i) / steps, width, hStep, col);
+			// 水在慢慢起伏：整片水色随时间和深度轻微呼吸，不是一张死渐变
+			const swell = 1 + Math.sin(waterClock * 0.9 - t * 3.4) * GameConfig.WATER.SWELL;
+			const r = Math.round((((top >>> 16) & 0xff) * (1 - t) + ((deep >>> 16) & 0xff) * t) * swell);
+			const g = Math.round((((top >>> 8) & 0xff) * (1 - t) + ((deep >>> 8) & 0xff) * t) * swell);
+			const b = Math.round(((top & 0xff) * (1 - t) + (deep & 0xff) * t) * swell);
+			const col =
+				0xff000000 |
+				(Math.min(255, r) << 16) |
+				(Math.min(255, g) << 8) |
+				Math.min(255, b);
+			const hStep = WATER_H / steps + 1;
+			drawRect(waterDraw, left, WATER_TOP + (WATER_H * i) / steps, width, hStep, col);
 		}
 	};
 
@@ -295,12 +310,40 @@ export function GameScene(): Node.Type {
 		const n = GameConfig.WATER.RIPPLE_COUNT;
 		for (let i = 0; i < n; i++) {
 			const seed = groundRand(i * 3.3 + 1.1);
-			const y = 3 + seed * (WATER_TOP - 9);
+			const y = WATER_TOP + 4 + seed * (WATER_H - 12);
 			const len = width * (0.14 + groundRand(i * 7.7) * 0.42);
 			const speed = 5 + groundRand(i * 2.1) * 8;
 			const drift = ((waterClock * speed + seed * 1000) % (width + 320)) - 160;
-			const alpha = 0x18 + Math.floor(groundRand(i * 5.5) * 0x20);
+			const alpha = 0x28 + Math.floor(groundRand(i * 5.5) * 0x34);
 			drawRect(rippleDraw, left + drift, y, len, 2, (alpha << 24) | 0xdfefff);
+			// 每道波纹底下再压一条更暗的，看着像水面的褶皱
+			drawRect(rippleDraw, left + drift + 6, y + 2, len * 0.7, 1, ((alpha >>> 1) << 24) | 0x9fc0e8);
+		}
+		// 水岸亮边：贴着地平线的一条浅水反光，随水波轻微呼吸
+		const shoreA = 0x30 + Math.floor((Math.sin(waterClock * 1.2) * 0.5 + 0.5) * 0x26);
+		drawRect(rippleDraw, left, WATER_TOP + 1, width, 2, (shoreA << 24) | 0xffffff);
+		drawRect(rippleDraw, left, WATER_TOP + 3, width, 1, (Math.floor(shoreA * 0.6) << 24) | 0xcfe8ff);
+		// 碎光：位置/周期各不相同，淡入淡出地闪
+		glintDraw.clear();
+		const gn = GameConfig.WATER.GLINT_COUNT;
+		for (let i = 0; i < gn; i++) {
+			const ph = groundRand(i * 13.7);
+			const cycle = 1.6 + ph * 2.8;
+			const t = ((waterClock / cycle + ph) % 1 + 1) % 1;
+			if (t > 0.36) continue; // 只在一小段周期里亮，才有「闪」的感觉
+			const fade = Math.sin((t / 0.36) * Math.PI);
+			const gx =
+				left + 40 + groundRand(i * 2.3) * (width - 80) + Math.sin(waterClock * 0.6 + i) * 9;
+			const gy = WATER_TOP + 6 + groundRand(i * 4.9) * (WATER_H - 16);
+			const gw = 4 + Math.floor(groundRand(i * 6.1) * 9);
+			const ga = Math.floor(0x30 + fade * 0x82);
+			drawRect(glintDraw, gx, gy, gw, 3, (ga << 24) | 0xf2f8ff);
+		}
+		// 倒影微摆：每个倒影左右各晃一点，看着就像水里在动
+		for (let i = 0; i < mirrorNodes.length; i++) {
+			const m = mirrorNodes[i];
+			if (m === undefined) continue;
+			m.scaleX = 1 + Math.sin(waterClock * 0.7 + i * 1.7) * 0.03;
 		}
 	};
 
@@ -313,8 +356,9 @@ export function GameScene(): Node.Type {
 		if (found !== undefined) return found;
 		const n = Node();
 		n.tag = 'refl';
+		mirrorNodes.push(n);
 		// 源挂点原点在地平线上，倒影要从水面线往下翻，所以往下让出一格岸带
-		n.y = -GameConfig.WATER.SHORE_BAND;
+		n.y = 0; // 镜像原点压在水面线上：倒影从水面往下翻
 		n.scaleY = -GameConfig.WATER.REFLECT_SQUASH;
 		n.opacity = GameConfig.WATER.REFLECT_OPACITY;
 		parent.addChild(n);

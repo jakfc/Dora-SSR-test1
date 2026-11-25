@@ -475,141 +475,338 @@ def gen_salt_tier(base_name, out_name, level, folder=BG, out_folder=BD):
 
 # ------------------------------------------------------------------ 民居：每级一座
 
-def house_common(d, cx, base_y, half_w, wall_c=(230, 224, 210, 255)):
-    d.rectangle(
-        [cx - half_w, base_y - 16 * S, cx + half_w, base_y],
-        fill=(150, 146, 138, 255),
-        outline=OUTLINE,
-        width=4,
-    )
-    for i in range(1, 5):
-        bx = cx - half_w + (half_w * 2) * i / 5.0
-        d.line([(bx, base_y - 15 * S), (bx, base_y - 1 * S)], fill=(118, 114, 108, 255), width=3)
+# ------------------------------------------------------- 民居：浙南白墙黛瓦（重画）
+# 画布纵向必须占满：贴图底边贴地，高度就是视觉身高（见 Assets.ts 的 PERSON_TARGET）。
+
+C_PLASTER_T = (240, 235, 223, 255)
+C_PLASTER_B = (216, 208, 192, 255)
+C_STAIN = (198, 190, 174, 255)
+C_TIMBER = (126, 90, 56, 255)
+C_TIMBER_D = (84, 58, 34, 255)
+C_TILE = (62, 70, 84, 255)
+C_TILE_D = (40, 46, 58, 255)
+C_TILE_L = (108, 120, 138, 255)
+C_STONE = (152, 148, 140, 255)
+C_STONE_D = (114, 110, 104, 255)
+C_STONE_L = (182, 178, 170, 255)
+C_THATCH = (172, 144, 90, 255)
+C_THATCH_D = (126, 100, 56, 255)
+C_THATCH_L = (210, 186, 130, 255)
+C_RED = (148, 54, 44, 255)
+C_RED_D = (108, 34, 28, 255)
+C_SHADOW = (26, 22, 18, 62)
+
+
+def _h_grad(d, box, c_top, c_bot):
+    x0, y0, x1, y1 = [int(round(v)) for v in box]
+    n = max(1, y1 - y0)
+    for i in range(n):
+        t = i / float(n)
+        c = tuple(int(c_top[k] + (c_bot[k] - c_top[k]) * t) for k in range(3)) + (255,)
+        d.line([(x0, y0 + i), (x1, y0 + i)], fill=c)
+
+
+def _h_plaster(d, box, seed=1):
+    """白粉墙：竖向渐变 + 斑驳污渍 + 描边。"""
+    x0, y0, x1, y1 = [int(round(v)) for v in box]
+    _h_grad(d, box, C_PLASTER_T, C_PLASTER_B)
+    rnd = random.Random(seed)
+    n = int((x1 - x0) * (y1 - y0) / 2200) + 4
+    for _ in range(n):
+        px = rnd.uniform(x0 + 4, x1 - 4)
+        py = rnd.uniform(y0 + 5, y1 - 5)
+        rw = rnd.uniform(3, 10) * S / 2.0
+        rh = rnd.uniform(2, 6) * S / 2.0
+        d.ellipse([px - rw, py - rh, px + rw, py + rh], fill=C_STAIN)
+    # 勒脚（墙根湿痕）
+    d.rectangle([x0, y1 - 6 * S / 2.0, x1, y1], fill=(176, 170, 156, 255))
+    d.rectangle([x0, y0, x1, y1], outline=OUTLINE, width=4)
+
+
+def _h_stone_base(d, cx, y_base, half_w, h, steps=True):
+    """台基：石条 + 压顶 + 石板缝 + 台阶。"""
+    x0, x1 = cx - half_w, cx + half_w
+    yt = y_base - h
+    d.polygon([(x0 - 4, y_base), (x1 + 4, y_base), (x1 + 4, yt), (x0 - 4, yt)], fill=C_STONE)
+    d.line([(x0 - 4, yt), (x1 + 4, yt)], fill=C_STONE_L, width=4)
+    d.line([(x0 - 4, y_base - 3), (x1 + 4, y_base - 3)], fill=C_STONE_D, width=3)
+    for i in range(1, 6):
+        bx = x0 - 4 + (x1 - x0 + 8) * i / 6.0
+        d.line([(bx, yt + 3), (bx, y_base - 3)], fill=C_STONE_D, width=3)
+    d.line([(x0 - 4, yt + h * 0.5), (x1 + 4, yt + h * 0.5)], fill=C_STONE_D, width=2)
+    d.rectangle([x0 - 4, yt, x1 + 4, y_base], outline=OUTLINE, width=4)
+    if steps:
+        sw = half_w * 0.36
+        d.rectangle([cx - sw, y_base - h * 0.45, cx + sw, y_base + 2], fill=C_STONE_L, outline=OUTLINE, width=3)
+        d.line([(cx - sw + 4, y_base - h * 0.45), (cx - sw + 4, y_base)], fill=C_STONE_D, width=2)
+
+
+def _h_lr(xl_t, xr_t, xl_b, xr_b, y_t, y_b):
+    """屋面梯形：给任意 y 返回左右边界。"""
+    def lr(y):
+        t = (y - y_t) / float(max(1.0, y_b - y_t))
+        return xl_t + (xl_b - xl_t) * t, xr_t + (xr_b - xr_t) * t
+    return lr
+
+
+def _h_tile_roof(d, xl_t, xr_t, xl_b, xr_b, y_t, y_b, cols=9, upturn=True):
+    """黛瓦屋面：梯形底 + 竖瓦垄 + 横瓦排 + 滴水檐 + 正脊 + 翘角。"""
+    lr = _h_lr(xl_t, xr_t, xl_b, xr_b, y_t, y_b)
+    for y in range(int(y_t), int(y_b) + 1):
+        x0, x1 = lr(y)
+        d.line([(x0, y), (x1, y)], fill=C_TILE)
+    for i in range(cols + 1):
+        f = i / float(cols)
+        cc = C_TILE_D if i % 2 == 0 else C_TILE_L
+        xa = xl_t + (xr_t - xl_t) * f
+        xb = xl_b + (xr_b - xl_b) * f
+        d.line([(xa, y_t + 2), (xb, y_b)], fill=cc, width=2)
+    for r in range(1, 5):
+        y = y_t + (y_b - y_t) * r / 5.0
+        x0, x1 = lr(y)
+        d.line([(x0, y), (x1, y)], fill=C_TILE_D, width=2)
+    # 檐口滴水
+    x0, x1 = lr(y_b)
+    d.line([(x0, y_b), (x1, y_b)], fill=C_TILE_L, width=5)
+    d.line([(x0, y_b + 4), (x1, y_b + 4)], fill=C_TILE_D, width=4)
+    if upturn:
+        for sgn, x in ((-1, x0), (1, x1)):
+            poly(d, [(x, y_b + 2), (x + sgn * 7 * S, y_b - 8 * S), (x + sgn * 1 * S, y_b - 4)], C_TILE, width=3)
+    # 正脊
+    xa, xb = lr(y_t + 1)
+    d.line([(xa - 4, y_t), (xb + 4, y_t)], fill=C_TILE_L, width=7)
+    d.line([(xa - 4, y_t - 5), (xb + 4, y_t - 5)], fill=C_TILE_D, width=3)
+    for sgn, x in ((-1, xa), (1, xb)):
+        d.rectangle([x - 3 * S, y_t - 12, x + 3 * S, y_t - 2], fill=C_TILE_D)
+
+
+def _h_thatch_roof(d, xl_t, xr_t, xl_b, xr_b, y_t, y_b, seed=7):
+    """茅草顶：梯形底 + 细草茎 + 压脊草绳。"""
+    lr = _h_lr(xl_t, xr_t, xl_b, xr_b, y_t, y_b)
+    for y in range(int(y_t), int(y_b) + 1):
+        x0, x1 = lr(y)
+        t = (y - y_t) / float(max(1.0, y_b - y_t))
+        c = tuple(int(C_THATCH_D[k] + (C_THATCH[k] - C_THATCH_D[k]) * (1 - t * 0.5)) for k in range(3)) + (255,)
+        d.line([(x0, y), (x1, y)], fill=c)
+    rnd = random.Random(seed)
+    for _ in range(120):
+        y = rnd.uniform(y_t + 3, y_b - 2)
+        x0, x1 = lr(y)
+        if x1 - x0 < 6:
+            continue
+        x = rnd.uniform(x0 + 2, x1 - 2)
+        d.line([(x, y), (x + rnd.uniform(-4, 4) * S / 2.0, min(y + rnd.uniform(8, 26), y_b))],
+               fill=C_THATCH_L if rnd.random() < 0.45 else C_THATCH_D, width=2)
+    # 檐口
+    x0, x1 = lr(y_b)
+    d.line([(x0, y_b), (x1, y_b)], fill=C_THATCH_D, width=7)
+    d.line([(x0 + 3, y_b + 3), (x1 - 3, y_b + 3)], fill=C_THATCH_L, width=3)
+    # 压脊（草绳 + 木压条）
+    xa, xb = lr(y_t + 2)
+    d.line([(xa - 3, y_t), (xb + 3, y_t)], fill=C_THATCH_L, width=8)
+    for i in range(6):
+        px = xa + (xb - xa) * (i + 1) / 7.0
+        d.line([(px, y_t - 4), (px, y_t + 5)], fill=C_THATCH_D, width=3)
+    d.line([(xa - 6, y_t - 4), (xb + 6, y_t - 4)], fill=C_TIMBER_D, width=4)
+
+
+def _h_lattice(d, cx, cy, w, h, cols=3, rows=2, dark=False):
+    """木格窗（含窗台）。"""
+    x0, y0, x1, y1 = cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0
+    d.rectangle([x0, y0, x1, y1], fill=(48, 46, 42, 255) if dark else (86, 82, 74, 255))
+    for i in range(1, cols):
+        bx = x0 + w * i / cols
+        d.line([(bx, y0 + 2), (bx, y1 - 2)], fill=C_TIMBER, width=3)
+    for i in range(1, rows):
+        by = y0 + h * i / rows
+        d.line([(x0 + 2, by), (x1 - 2, by)], fill=C_TIMBER, width=3)
+    d.rectangle([x0, y0, x1, y1], outline=OUTLINE, width=3)
+    d.rectangle([x0 - 5, y1 + 1, x1 + 5, y1 + 7], fill=C_STONE_L, outline=OUTLINE, width=2)
+
+
+def _h_door(d, cx, y_bottom, w, h, red=False, threshold=True):
+    """木门 / 大门（含门槛、门簪、门环）。"""
+    x0, y0, x1, y1 = cx - w / 2.0, y_bottom - h, cx + w / 2.0, y_bottom
+    body = C_RED if red else (112, 80, 50, 255)
+    d.rectangle([x0, y0, x1, y1], fill=body, outline=OUTLINE, width=4)
+    d.line([(cx, y0 + 2), (cx, y1)], fill=C_RED_D if red else C_TIMBER_D, width=3)
+    for sx in (x0 + 5, x1 - 5):
+        d.line([(sx, y0 + 3), (sx, y1 - 3)], fill=C_TIMBER_D, width=2)
+    if red:
+        for py in (y0 + h * 0.26, y0 + h * 0.5, y0 + h * 0.74):
+            for px in (cx - w * 0.22, cx + w * 0.22):
+                d.ellipse([px - 3 * S / 2.0, py - 3 * S / 2.0, px + 3 * S / 2.0, py + 3 * S / 2.0], fill=GOLD)
+        for px in (cx - w * 0.3, cx + w * 0.3):
+            d.ellipse([px - 4 * S, y0 + h * 0.42, px + 4 * S, y0 + h * 0.46], outline=GOLD, width=3)
+    else:
+        d.ellipse([cx + w * 0.24 - 5 * S, y1 - h * 0.42, cx + w * 0.24 + 5 * S, y1 - h * 0.42 + 5 * S],
+                  outline=GOLD, width=3)
+    if threshold:
+        d.rectangle([x0 - 6, y1 - 4, x1 + 6, y1 + 6], fill=C_STONE_L, outline=OUTLINE, width=3)
+    # 门楣
+    d.rectangle([x0 - 8, y0 - 8, x1 + 8, y0], fill=C_TIMBER, outline=OUTLINE, width=3)
+
+
+def _h_lantern(d, cx, y_top, r, rope=10):
+    d.line([(cx, y_top - rope), (cx, y_top)], fill=(78, 56, 38, 255), width=3)
+    d.ellipse([cx - r, y_top, cx + r, y_top + r * 2.1], fill=(198, 74, 60, 255), outline=OUTLINE, width=3)
+    d.line([(cx - r * 0.7, y_top + r * 0.5), (cx + r * 0.7, y_top + r * 0.5)], fill=(226, 150, 120, 255), width=2)
+    d.line([(cx, y_top + r * 2.1), (cx, y_top + r * 2.1 + 5)], fill=(198, 74, 60, 255), width=3)
+
+
+def _h_eave_shadow(d, x0, y0, x1, h):
+    """檐下阴影：贴在墙上一条，给屋面一点厚度感。"""
+    d.rectangle([x0, y0, x1, y0 + h], fill=C_SHADOW)
 
 
 def gen_house_plot(out_name, W0=120, H0=70):
+    """空地：夯土台 + 放线木桩，等着盖房。"""
     W, H = W0 * S, H0 * S
     cv = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(cv)
-    x0, x1 = 8 * S, (W0 - 8) * S
-    y0, y1 = 30 * S, (H0 - 5) * S
-    d.rounded_rectangle([x0, y0, x1, y1], radius=6 * S, fill=(146, 142, 134, 255), outline=OUTLINE, width=4)
-    for i in range(1, 6):
-        bx = x0 + (x1 - x0) * i / 6.0
-        d.line([(bx, y0 + 3 * S), (bx, y1 - 3 * S)], fill=(116, 112, 106, 255), width=3)
-    # 四角木桩（放线）
-    for px in (x0 + 4 * S, x1 - 4 * S):
-        d.rectangle([px - 5 * S, y0 - 22 * S, px + 5 * S, y1], fill=(122, 92, 60, 255), outline=OUTLINE, width=3)
-    # 未来的墙线
-    d.rectangle([x0 + 14 * S, y0 - 40 * S, x1 - 14 * S, y0], outline=(196, 192, 184, 210), width=3)
-    paint_stones(d, x0, y0, x1, y1, 10, 51)
+    x0, x1 = 10 * S, (W0 - 10) * S
+    y1 = H
+    y0 = y1 - 26 * S
+    d.polygon([(x0 - 6 * S, y1), (x1 + 6 * S, y1), (x1, y0), (x0, y0)], fill=(158, 150, 136, 255))
+    paint_stones(d, x0, y0, x1, y1, 12, 51)
+    d.line([(x0, y0), (x1, y0)], fill=(126, 120, 110, 255), width=4)
+    d.rectangle([x0, y0, x1, y1], outline=OUTLINE, width=4)
+    for px in (x0 + 5 * S, x1 - 5 * S):
+        d.rectangle([px - 4 * S, y0 - 26 * S, px + 4 * S, y0], fill=(126, 94, 60, 255), outline=OUTLINE, width=3)
+        d.line([(px - 4 * S, y0 - 20 * S), (px + 4 * S, y0 - 16 * S)], fill=C_TIMBER_D, width=2)
+    d.rectangle([x0 + 12 * S, y0 - 46 * S, x1 - 12 * S, y0], outline=(200, 196, 188, 190), width=3)
     save_pair(cv, out_name)
 
 
-def gen_house_lv1(out_name, W0=150, H0=140):
+def gen_house_lv1(out_name, W0=150, H0=162):
+    """一级：石基 + 白墙 + 木窗木门 + 茅草顶。
+
+    门高 = 画布的 43%，配 3.0 人的屋子 → 门净高约 1.36 人：
+    人从门下过要明显矮一截，不能出现「人跟门一样高」。
+    """
     W, H = W0 * S, H0 * S
     cv = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(cv)
     cx = W0 / 2.0 * S
-    base_y = (H0 - 12) * S
-    house_common(d, cx, base_y, 65 * S)
-    wall_top = 64 * S
-    d.rectangle([20 * S, wall_top, 130 * S, base_y - 16 * S], fill=(228, 222, 208, 255), outline=OUTLINE, width=4)
-    # 木构架
-    for fx in (0.22, 0.5, 0.78):
-        px = 20 * S + 110 * S * fx
-        d.line([(px, wall_top + 4 * S), (px, base_y - 18 * S)], fill=(142, 104, 70, 255), width=4)
-    d.rectangle([64 * S, 76 * S, 88 * S, base_y - 16 * S], fill=(96, 68, 44, 255), outline=OUTLINE, width=4)
-    d.rectangle([34 * S, 84 * S, 54 * S, 102 * S], fill=(58, 56, 52, 255), outline=OUTLINE, width=3)
+    base_y = H - 1
+    plinth = 15 * S
+    wx0, wx1 = 20 * S, 130 * S
+    wall_t = 46 * S
+    wall_b = base_y - plinth
+    _h_stone_base(d, cx, base_y, 62 * S, plinth)
+    _h_plaster(d, [wx0, wall_t, wx1, wall_b], 11)
+    # 木构架：角柱 + 中柱
+    for px in (wx0 + 4, cx, wx1 - 4):
+        d.line([(px, wall_t + 4), (px, wall_b - 2)], fill=C_TIMBER, width=5)
+    d.line([(wx0 + 4, wall_t + 12), (wx1 - 4, wall_t + 12)], fill=C_TIMBER, width=4)
+    # 门：整张图里唯一「人要穿过去」的地方，必须明显高过人
+    _h_door(d, cx, wall_b, 32 * S, 70 * S)
+    # 门两侧各开一扇窗（比门矮，横向上也不跟门打架）
+    _h_lattice(d, cx - 47 * S, wall_b - 38 * S, 22 * S, 30 * S, 3, 3)
+    _h_lattice(d, cx + 47 * S, wall_b - 38 * S, 22 * S, 30 * S, 3, 3)
+    # 檐下阴影
+    _h_eave_shadow(d, wx0 + 2, wall_t, wx1 - 2, 9 * S)
     # 茅草顶
-    poly(d, [(6 * S, wall_top + 3 * S), (144 * S, wall_top + 3 * S), (120 * S, 22 * S), (30 * S, 22 * S)], (152, 126, 74, 255), width=4)
-    rnd = random.Random(61)
-    for i in range(26):
-        x = rnd.uniform(14 * S, 136 * S)
-        d.line([(x, wall_top), (x + rnd.uniform(-6, 6) * S, 26 * S)], fill=(120, 98, 58, 255), width=2)
-    d.line([(30 * S, 22 * S), (120 * S, 22 * S)], fill=(178, 150, 96, 255), width=4)
+    _h_thatch_roof(d, 36 * S, 114 * S, 4 * S, 146 * S, 6 * S, wall_t + 6 * S, 61)
     save_pair(cv, out_name)
 
 
-def gen_house_lv2(out_name, W0=180, H0=170):
+def gen_house_lv2(out_name, W0=185, H0=188):
+    """二级：两层瓦房，一层高门脸 + 二层挑阁，黛瓦翘角，挂灯笼。
+
+    门高 = 画布的 43%，配 3.8 人的屋子 → 门净高约 1.7 人。
+    """
     W, H = W0 * S, H0 * S
     cv = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(cv)
     cx = W0 / 2.0 * S
-    base_y = (H0 - 12) * S
-    house_common(d, cx, base_y, 80 * S)
-    # 一层
-    d.rectangle([22 * S, 80 * S, 158 * S, base_y - 16 * S], fill=(230, 224, 210, 255), outline=OUTLINE, width=4)
-    d.rectangle([80 * S, 96 * S, 102 * S, base_y - 16 * S], fill=(150, 52, 44, 255), outline=OUTLINE, width=4)
-    d.line([(91 * S, 96 * S), (91 * S, base_y - 16 * S)], fill=GOLD, width=3)
-    for px in (44 * S, 132 * S):
-        d.rectangle([px - 12 * S, 94 * S, px + 12 * S, 114 * S], fill=(58, 56, 52, 255), outline=OUTLINE, width=3)
+    base_y = H - 1
+    plinth = 15 * S
+    wx0, wx1 = 24 * S, 161 * S
+    floor_b = base_y - plinth
+    floor_mid = 76 * S
+    _h_stone_base(d, cx, base_y, 78 * S, plinth, steps=False)
+    # 一层：门几乎顶到一层檐口，两侧配高窗
+    _h_plaster(d, [wx0, floor_mid, wx1, floor_b], 21)
+    _h_door(d, cx, floor_b, 40 * S, 80 * S, red=True)
+    _h_lattice(d, cx - 52 * S, floor_b - 46 * S, 24 * S, 34 * S, 3, 3)
+    _h_lattice(d, cx + 52 * S, floor_b - 46 * S, 24 * S, 34 * S, 3, 3)
+    _h_eave_shadow(d, wx0 + 2, floor_mid, wx1 - 2, 8 * S)
     # 一层瓦檐
-    poly(d, [(8 * S, 82 * S), (172 * S, 82 * S), (146 * S, 52 * S), (34 * S, 52 * S)], (74, 82, 96, 255), width=4)
+    _h_tile_roof(d, 52 * S, 133 * S, 10 * S, 175 * S, 60 * S, floor_mid - 2 * S, 11)
     # 二层
-    d.rectangle([44 * S, 34 * S, 136 * S, 54 * S], fill=(234, 228, 214, 255), outline=OUTLINE, width=4)
-    for px in (66 * S, 114 * S):
-        d.rectangle([px - 11 * S, 38 * S, px + 11 * S, 50 * S], fill=(58, 56, 52, 255), outline=OUTLINE, width=3)
-    poly(d, [(28 * S, 36 * S), (152 * S, 36 * S), (130 * S, 8 * S), (50 * S, 8 * S)], (66, 74, 88, 255), width=4)
-    d.line([(50 * S, 8 * S), (130 * S, 8 * S)], fill=GOLD, width=4)
-    # 灯笼
-    for px in (60 * S, 120 * S):
-        d.ellipse([px - 9 * S, 60 * S, px + 9 * S, 78 * S], fill=(198, 72, 60, 255), outline=OUTLINE, width=3)
+    up0, up1 = 47 * S, 138 * S
+    up_t, up_b = 26 * S, 58 * S
+    _h_plaster(d, [up0, up_t, up1, up_b], 22)
+    d.line([(up0 + 4, up_t + 10), (up1 - 4, up_t + 10)], fill=C_TIMBER, width=4)
+    _h_lattice(d, cx - 26 * S, up_t + 20 * S, 22 * S, 16 * S, 3, 2, dark=True)
+    _h_lattice(d, cx + 26 * S, up_t + 20 * S, 22 * S, 16 * S, 3, 2, dark=True)
+    # 二层栏杆
+    d.rectangle([up0 - 6, up_b - 2, up1 + 6, up_b + 4], fill=C_TIMBER, outline=OUTLINE, width=3)
+    for i in range(7):
+        bx = up0 + (up1 - up0) * (i + 1) / 8.0
+        d.line([(bx, up_b - 10), (bx, up_b)], fill=C_TIMBER, width=3)
+    _h_tile_roof(d, 64 * S, 121 * S, 34 * S, 151 * S, 8 * S, up_t - 2 * S, 9)
+    # 灯笼（挂在门两侧、一层檐下）
+    _h_lantern(d, 62 * S, 74 * S, 6 * S, 10)
+    _h_lantern(d, 123 * S, 74 * S, 6 * S, 10)
     save_pair(cv, out_name)
 
 
-def gen_house_lv3(out_name, W0=220, H0=200):
+def gen_house_lv3(out_name, W0=230, H0=230):
+    """三级：院墙 + 马头墙 + 高门正屋 + 二层阁楼（大户人家）。
+
+    门高 = 画布的 37%，配 4.6 人的宅院 → 门净高约 1.72 人。
+    """
     W, H = W0 * S, H0 * S
     cv = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(cv)
     cx = W0 / 2.0 * S
-    base_y = (H0 - 14) * S
-    house_common(d, cx, base_y, 100 * S)
-    # 院墙
-    d.rectangle([8 * S, 150 * S, 212 * S, base_y - 16 * S], fill=(216, 210, 196, 255), outline=OUTLINE, width=4)
-    d.rectangle([8 * S, 143 * S, 212 * S, 151 * S], fill=(70, 78, 92, 255), outline=OUTLINE, width=3)
-    # 马头墙（两侧阶梯山墙）
+    base_y = H - 1
+    plinth = 14 * S
+    yard_t = 176 * S
+    # 院墙 + 瓦压顶
+    _h_stone_base(d, cx, base_y, 105 * S, plinth, steps=False)
+    _h_plaster(d, [10 * S, yard_t, 220 * S, base_y - plinth], 31)
+    d.rectangle([4 * S, yard_t - 6 * S, 226 * S, yard_t + 6 * S], fill=C_TILE, outline=OUTLINE, width=3)
+    d.line([(4 * S, yard_t - 6 * S), (226 * S, yard_t - 6 * S)], fill=C_TILE_L, width=3)
+    # 石板院地
+    for i in range(1, 9):
+        bx = 10 * S + 210 * S * i / 9.0
+        d.line([(bx, yard_t + 8 * S), (bx, base_y - plinth)], fill=C_STONE_D, width=2)
+    # 马头墙（阶梯山墙，两侧对称）
     for sgn in (-1, 1):
-        bx = cx + sgn * 82 * S
-        for k, (yy, hw) in enumerate(((96 * S, 26 * S), (72 * S, 20 * S), (50 * S, 14 * S))):
-            d.rectangle(
-                [bx - hw, yy - 22 * S, bx + hw, yy],
-                fill=(230, 224, 210, 255),
-                outline=OUTLINE,
-                width=3,
-            )
-            d.rectangle([bx - hw - 3 * S, yy - 27 * S, bx + hw + 3 * S, yy - 21 * S], fill=(66, 74, 88, 255))
-    # 正屋
-    d.rectangle([40 * S, 96 * S, 180 * S, 150 * S], fill=(234, 228, 214, 255), outline=OUTLINE, width=4)
-    poly(d, [(24 * S, 98 * S), (196 * S, 98 * S), (168 * S, 64 * S), (52 * S, 64 * S)], (64, 72, 86, 255), width=4)
-    # 翘角
-    for sgn, ex in ((-1, 24 * S), (1, 196 * S)):
-        poly(d, [(ex, 98 * S), (ex + sgn * 20 * S, 84 * S), (ex + sgn * 6 * S, 100 * S)], (64, 72, 86, 255), width=3)
-    d.line([(52 * S, 64 * S), (168 * S, 64 * S)], fill=GOLD, width=4)
-    # 大门
-    d.rectangle([92 * S, 112 * S, 128 * S, 150 * S], fill=(150, 52, 44, 255), outline=OUTLINE, width=4)
-    d.line([(110 * S, 112 * S), (110 * S, 150 * S)], fill=GOLD, width=3)
-    for px in (100 * S, 120 * S):
-        for py in (122 * S, 134 * S):
-            d.ellipse([px - 3 * S, py - 3 * S, px + 3 * S, py + 3 * S], fill=GOLD)
-    # 门簪灯笼
-    for px in (86 * S, 134 * S):
-        d.line([(px, 96 * S), (px, 104 * S)], fill=(80, 58, 40, 255), width=3)
-        d.ellipse([px - 10 * S, 104 * S, px + 10 * S, 124 * S], fill=(202, 74, 60, 255), outline=OUTLINE, width=3)
+        bx = cx + sgn * 92 * S
+        for (yy, hw) in ((140 * S, 32 * S), (112 * S, 24 * S), (86 * S, 17 * S)):
+            _h_plaster(d, [bx - hw, yy - 26 * S, bx + hw, yy], 32 + int(hw))
+            d.rectangle([bx - hw - 5 * S, yy - 32 * S, bx + hw + 5 * S, yy - 24 * S], fill=C_TILE, outline=OUTLINE, width=3)
+            d.line([(bx - hw - 5 * S, yy - 32 * S), (bx + hw + 5 * S, yy - 32 * S)], fill=C_TILE_L, width=3)
+    # 正屋：高门 + 两侧高窗
+    hall_t, hall_b = 72 * S, 178 * S
+    _h_plaster(d, [36 * S, hall_t, 194 * S, hall_b], 33)
+    d.line([(40 * S, hall_t + 12), (190 * S, hall_t + 12)], fill=C_TIMBER, width=4)
+    _h_lattice(d, 62 * S, hall_b - 50 * S, 24 * S, 34 * S, 3, 3, dark=True)
+    _h_lattice(d, 168 * S, hall_b - 50 * S, 24 * S, 34 * S, 3, 3, dark=True)
+    _h_eave_shadow(d, 38 * S, hall_t, 192 * S, 8 * S)
+    _h_door(d, cx, hall_b, 46 * S, 84 * S, red=True)
+    _h_lantern(d, 82 * S, hall_b - 88 * S, 7 * S, 12)
+    _h_lantern(d, 148 * S, hall_b - 88 * S, 7 * S, 12)
+    _h_tile_roof(d, 88 * S, 142 * S, 26 * S, 204 * S, 44 * S, hall_t - 2 * S, 13)
     # 二层阁楼
-    d.rectangle([76 * S, 42 * S, 144 * S, 62 * S], fill=(236, 230, 216, 255), outline=OUTLINE, width=4)
-    for px in (96 * S, 124 * S):
-        d.rectangle([px - 10 * S, 46 * S, px + 10 * S, 58 * S], fill=(58, 56, 52, 255), outline=OUTLINE, width=3)
-    poly(d, [(60 * S, 44 * S), (160 * S, 44 * S), (138 * S, 14 * S), (82 * S, 14 * S)], (58, 66, 80, 255), width=4)
-    d.line([(82 * S, 14 * S), (138 * S, 14 * S)], fill=GOLD, width=4)
+    att_t, att_b = 22 * S, 42 * S
+    _h_plaster(d, [92 * S, att_t, 138 * S, att_b], 34)
+    d.line([(96 * S, att_t + 9), (134 * S, att_t + 9)], fill=C_TIMBER, width=4)
+    _h_lattice(d, cx - 16 * S, att_t + 14 * S, 18 * S, 12 * S, 3, 2, dark=True)
+    _h_lattice(d, cx + 16 * S, att_t + 14 * S, 18 * S, 12 * S, 3, 2, dark=True)
+    _h_tile_roof(d, 96 * S, 134 * S, 84 * S, 146 * S, 4 * S, att_t - 2 * S, 7)
     save_pair(cv, out_name)
-
 
 # ------------------------------------------------------------------------ 主流程
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--force', action='store_true', help='已存在的文件也重新生成')
+    ap.add_argument('--only', default='', help='只生成名字含该子串的任务')
     args = ap.parse_args()
 
     tasks = []
@@ -639,6 +836,8 @@ def main():
     print('逐级建模：共 %d 张' % len(tasks))
     done = 0
     for name, fn in tasks:
+        if args.only and args.only not in name:
+            continue
         if exists(name) and not args.force:
             print('  已有 %-28s 跳过（--force 可覆盖）' % name)
             continue

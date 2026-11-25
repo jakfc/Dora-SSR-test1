@@ -14,13 +14,14 @@ local function walk(n, d, ax, ay)
 	local nx, ny = ax + (n.x or 0), ay + (n.y or 0)
 	local ok, tex = pcall(function() return n.texture end)
 	if ok and tex then
-		local tw, th, sw, sh, sx, op, vis = 0, 0, 0, 0, 1, 1, true
+		local tw, th, sw, sh, sx, sy, op, vis, tg = 0, 0, 0, 0, 1, 1, 1, true, ''
 		pcall(function() tw = tex.width; th = tex.height end)
 		pcall(function() sw = n.size.width; sh = n.size.height end)
-		pcall(function() sx = n.scaleX; op = n.opacity; vis = n.visible end)
+		pcall(function() sx = n.scaleX; sy = n.scaleY; op = n.opacity; vis = n.visible end)
+		pcall(function() tg = n.tag end)
 		lines[#lines + 1] = string.format(
-			'SPR tex %dx%d  draw %.1fx%.1f  pos %.0f,%.0f  scaleX %.2f  op %.2f  vis %s',
-			tw, th, sw, sh, nx, ny, sx, op, tostring(vis))
+			'SPR tex %dx%d  draw %.1fx%.1f  pos %.0f,%.0f  scaleX %.2f  scaleY %.2f  op %.2f  vis %s  tag %s',
+			tw, th, sw, sh, nx, ny, sx, sy, op, tostring(vis), tostring(tg))
 	end
 	local ok2, txt = pcall(function() return n.text end)
 	if ok2 and type(txt) == 'string' and #txt > 0 and #txt < 70 then
