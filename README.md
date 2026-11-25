@@ -93,6 +93,7 @@ API/Dora.d.ts            引擎导出的类型声明（提供编辑器补全）
 - [`docs/美术素材清单与AI生成规范.md`](docs/美术素材清单与AI生成规范.md) —— 尺寸、色板、风格总规范
 - [`docs/素材替换对照表.md`](docs/素材替换对照表.md) —— 全部 70+ 个资源 id ↔ 文件路径（`python tools/gen_asset_table.py` 自动生成）
 - [`docs/待补美术资源清单.md`](docs/待补美术资源清单.md) —— 还缺哪些图、按什么规格画
+- [`docs/节奏与镜头.md`](docs/节奏与镜头.md) —— 游戏快慢（`GAME_SPEED`）与镜头远近（`WORLD_ZOOM`）怎么调
 
 ## 参与开发
 

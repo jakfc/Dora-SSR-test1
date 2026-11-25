@@ -29,11 +29,13 @@ function drawRect(
 export function GameOverScene(isVictory: boolean): Node.Type {
 	const scene = Node();
 	const gs = GameState.instance;
+	// 结算界面属于 UI 空间：单位与设计分辨率一致，镜头拉近时不会被一起放大
+	Screen.attachUi(scene);
 	// 可视区域尺寸与设计框偏移
-	const W = Screen.width;
-	const H = Screen.height;
-	const ox = Screen.offsetX;
-	const oy = Screen.offsetY;
+	const W = Screen.uiWidth;
+	const H = Screen.uiHeight;
+	const ox = Screen.uiOffsetX;
+	const oy = Screen.uiOffsetY;
 
 	const bg = DrawNode();
 	// 结算底图（胜利 / 失败各一张）；有图就铺满屏，没图退回程序化底色 + 面板

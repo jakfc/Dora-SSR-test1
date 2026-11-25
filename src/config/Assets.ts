@@ -16,6 +16,9 @@ import { Node, Rect, Size, Sprite, Texture2D, Vec2 } from 'Dora';
  *   2) 想改目标大小            → 改这一项的 h（内容显示高度）或 w（宽度）；
  *   3) 想换别的文件名/目录      → 改这一项的 path。
  *
+ * 清晰度：同目录里若有 `<名字>@2x.png` 主稿，代码自动优先用它（见 hiPathOf），
+ * 没有才退回 1x。显示大小只由 w/h 决定，与贴图分辨率无关 —— 补主稿不会改变画面尺寸。
+ *
  * padTop / padBottom 是「占位素材实测的内容空白比例」：
  * 占位图按画布底部对齐、四周留白，所以按内容高度换算画布高度。
  * 正式美术若按画布满幅绘制（推荐），把这两项删掉即可（默认 0）。
@@ -165,6 +168,38 @@ export const ART: Record<string, ArtSpec> = {
 /** 已经确认不存在的路径（避免每帧重复尝试加载）。 */
 const missingPaths: Record<string, boolean> = {};
 
+/** 1x 路径 → 已确认可用的 @2x 高清路径（缓存；空串表示没有高清图）。 */
+const hiPathCache: Record<string, string> = {};
+
+/**
+ * 统一清晰度：同目录下若有 `<名字>@2x.png`，一律优先用它。
+ * 显示大小只由 ART 里的 w/h 决定，与贴图分辨率无关，所以换高清图不会改变画面尺寸。
+ */
+function hiPathOf(path: string): string | undefined {
+	const cached = hiPathCache[path];
+	if (cached !== undefined) return cached.length > 0 ? cached : undefined;
+	const hi = path.substring(0, path.length - 4) + '@2x.png';
+	const dim = Texture2D(hi);
+	const ok = dim !== undefined && dim.width > 0 && dim.height > 0;
+	hiPathCache[path] = ok ? hi : '';
+	return ok ? hi : undefined;
+}
+
+/** 取实际使用的贴图：优先 @2x 高清图，其次 1x 原图。 */
+function texOf(path: string): Texture2D.Type | undefined {
+	const hi = hiPathOf(path);
+	if (hi !== undefined) {
+		const high = Texture2D(hi);
+		if (high !== undefined && high.width > 0 && high.height > 0) return high;
+	}
+	const dim = Texture2D(path);
+	if (dim === undefined || dim.width <= 0 || dim.height <= 0) {
+		missingPaths[path] = true;
+		return undefined;
+	}
+	return dim;
+}
+
 function specOf(id: string): ArtSpec | undefined {
 	if (!USE_ART) return undefined;
 	const spec = ART[id];
@@ -215,11 +250,8 @@ export function artSprite(id: string, applySize = true): Sprite.Type | undefined
 
 /** 按具体路径 + 尺寸规范造精灵（动画帧复用此函数）。 */
 function artSpriteFromPath(path: string, spec: ArtSpec, applySize = true): Sprite.Type | undefined {
-	const dim = Texture2D(path);
-	if (dim === undefined || dim.width <= 0 || dim.height <= 0) {
-		missingPaths[path] = true;
-		return undefined;
-	}
+	const dim = texOf(path);
+	if (dim === undefined) return undefined;
 	const sprite = Sprite(dim);
 	if (sprite === undefined) {
 		missingPaths[path] = true;
@@ -236,18 +268,15 @@ function artSpriteFromPath(path: string, spec: ArtSpec, applySize = true): Sprit
 /** 素材是否存在（不产生节点）。 */
 export function artReady(id: string): boolean {
 	const spec = specOf(id);
-	return spec !== undefined && Texture2D(spec.path) !== undefined;
+	return spec !== undefined && texOf(spec.path) !== undefined;
 }
 
 /** 按 id 的设计显示尺寸；素材缺失时返回 undefined。 */
 export function artSize(id: string): Size.Type | undefined {
 	const spec = specOf(id);
 	if (spec === undefined) return undefined;
-	const dim = Texture2D(spec.path);
-	if (dim === undefined || dim.width <= 0 || dim.height <= 0) {
-		missingPaths[spec.path] = true;
-		return undefined;
-	}
+	const dim = texOf(spec.path);
+	if (dim === undefined) return undefined;
 	const fit = fitOf(spec, dim.width, dim.height);
 	return Size(fit.w, fit.h);
 }
@@ -308,6 +337,29 @@ export function artStretch(id: string, w: number, h: number): Sprite.Type | unde
 }
 
 /**
+ * 等比「覆盖」尺寸：按较大的缩放比铺满 w×h。
+ * 窗口宽高比和素材不一致时只裁边、不拉伸 —— 用于天空这类整屏背景，
+ * 镜头拉近后云山不会被压扁变形。素材缺失时按 w×h 返回。
+ */
+export function artCoverSize(id: string, w: number, h: number): Size.Type {
+	const base = artSize(id);
+	const bw = base !== undefined && base.width > 0 ? base.width : w;
+	const bh = base !== undefined && base.height > 0 ? base.height : h;
+	const scale = Math.max(w / bw, h / bh);
+	return Size(bw * scale, bh * scale);
+}
+
+/** 造一个等比铺满 w×h 的精灵（水平居中，底部贴齐节点原点）。 */
+export function artCover(id: string, w: number, h: number): Sprite.Type | undefined {
+	const sprite = artSprite(id, false);
+	if (sprite === undefined) return undefined;
+	const size = artCoverSize(id, w, h);
+	sprite.size = size;
+	sprite.x = (w - size.width) / 2;
+	return sprite;
+}
+
+/**
  * ============================================================
  *  逐帧动画（D 组素材）
  * ============================================================
@@ -354,7 +406,7 @@ export function artAnimFrames(styleId: string, prefix: string): string[] {
 		const dir = dirOfSpec(spec);
 		for (let i = 1; i <= ANIM_MAX_FRAMES; i++) {
 			const path = `${dir}${prefix}_${i < 10 ? '0' : ''}${i}.png`;
-			if (missingPaths[path] === true || Texture2D(path) === undefined) {
+			if (missingPaths[path] === true || texOf(path) === undefined) {
 				missingPaths[path] = true;
 				break;
 			}
@@ -431,9 +483,15 @@ export function artAnimFace(holder: Node.Type, styleId: string, facingLeft: bool
 }
 
 /** 动画播放速率（帧/秒），按动作区分节奏。 */
+/**
+ * 各路动画的播放帧率（帧/秒）。
+ * 行走帧率要和移动速度对得上：6 帧一个循环，若帧率太低，
+ * 单位走的距离会比腿摆多好几倍，看上去「滑步」。
+ * 族丁移速 130~185 设计单位/秒，13fps 时一个循环约 70 单位 ≈ 1.4 个身高，接近真实步幅。
+ */
 export const ANIM_FPS: Record<string, number> = {
 	idle: 2,
-	walk: 7,
+	walk: 13,
 	work: 6,
 	attack: 13,
 	fall: 8,

@@ -156,10 +156,10 @@ export class HudLayer {
 		this.topBg = DrawNode();
 		this.node.addChild(this.topBg);
 
-		this.topBarArt = artStretch('ui_top_bar', Screen.width, TOP_BAR_HEIGHT);
+		this.topBarArt = artStretch('ui_top_bar', Screen.uiWidth, TOP_BAR_HEIGHT);
 		if (this.topBarArt !== undefined) {
 			this.topBarArt.anchor = Vec2(0, 0);
-			this.topBarArt.size = Size(Screen.width, TOP_BAR_HEIGHT);
+			this.topBarArt.size = Size(Screen.uiWidth, TOP_BAR_HEIGHT);
 			this.node.addChild(this.topBarArt);
 		}
 
@@ -195,7 +195,7 @@ export class HudLayer {
 		// 黄昏未归 / 城外遇袭警报
 		this.alertLabel = Label('sarasa-mono-sc-regular', 16) as Label.Type;
 		this.alertLabel.color = Color(0xfffc8181);
-		this.alertLabel.textWidth = Screen.width - 80;
+		this.alertLabel.textWidth = Screen.uiWidth - 80;
 		this.alertLabel.visible = false;
 		this.node.addChild(this.alertLabel);
 
@@ -229,10 +229,10 @@ export class HudLayer {
 		this.bottomBg = DrawNode();
 		this.node.addChild(this.bottomBg);
 
-		this.bottomBarArt = artStretch('ui_bottom_bar', Screen.width, BOTTOM_BAR_HEIGHT);
+		this.bottomBarArt = artStretch('ui_bottom_bar', Screen.uiWidth, BOTTOM_BAR_HEIGHT);
 		if (this.bottomBarArt !== undefined) {
 			this.bottomBarArt.anchor = Vec2(0, 0);
-			this.bottomBarArt.size = Size(Screen.width, BOTTOM_BAR_HEIGHT);
+			this.bottomBarArt.size = Size(Screen.uiWidth, BOTTOM_BAR_HEIGHT);
 			this.node.addChild(this.bottomBarArt);
 		}
 
@@ -339,8 +339,10 @@ export class HudLayer {
 	}
 
 	private layout(): void {
-		const w = Screen.width;
-		const h = Screen.height;
+		// HUD 属于 UI 空间：单位就是设计单位，镜头拉近也不会把界面一起放大
+		Screen.attachUi(this.node);
+		const w = Screen.uiWidth;
+		const h = Screen.uiHeight;
 
 		// 顶栏
 		this.topBg.clear();

@@ -2,7 +2,7 @@ import { Color, DrawNode, KeyName, Keyboard, Label, Node, Size, Sprite, Vec2 } f
 import { SceneManager } from 'src/scenes/SceneManager';
 import { EnemyType, GameConfig, LandmarkId, ProjectKind, VillagerRole } from 'src/config/GameConfig';
 import { Screen } from 'src/config/Screen';
-import { artAt, artInto, artStretch } from 'src/config/Assets';
+import { artAt, artCover, artCoverSize, artInto, artStretch } from 'src/config/Assets';
 import { GameState, BuildProject } from 'src/config/GameState';
 import { DefenseTower } from 'src/entities/DefenseTower';
 import { Enemy } from 'src/entities/Enemy';
@@ -83,10 +83,11 @@ export function GameScene(): Node.Type {
 	scene.addChild(skyDraw);
 
 	// 天空贴图：白天 / 黄昏 / 夜晚三张，按状态切换（缺素材时退回纯色天空）
+	// 用 artCover 等比铺满：窗口宽高比与素材不一致时只裁边不拉伸，镜头拉近后云山不被压扁
 	const skyArts: Array<{ id: string; sprite: Sprite.Type | undefined }> = [
-		{ id: 'sky_day', sprite: artStretch('sky_day', Screen.width, Screen.height) },
-		{ id: 'sky_dusk', sprite: artStretch('sky_dusk', Screen.width, Screen.height) },
-		{ id: 'sky_night', sprite: artStretch('sky_night', Screen.width, Screen.height) },
+		{ id: 'sky_day', sprite: artCover('sky_day', Screen.width, Screen.height) },
+		{ id: 'sky_dusk', sprite: artCover('sky_dusk', Screen.width, Screen.height) },
+		{ id: 'sky_night', sprite: artCover('sky_night', Screen.width, Screen.height) },
 	];
 	for (const item of skyArts) {
 		if (item.sprite === undefined) continue;
@@ -310,7 +311,10 @@ export function GameScene(): Node.Type {
 	worldLayer.addChild(player.node);
 
 	worldLayer.onTapEnded((touch) => {
-		if (touch.location.y >= 80 && touch.location.y <= Screen.height - 70) {
+		// 屏蔽 HUD 顶栏 / 底部操作条上的点击（那两个条是 UI 单位，需换算成世界单位）
+		const topGuard = Screen.uiToWorld(70);
+		const bottomGuard = Screen.uiToWorld(80);
+		if (touch.location.y >= bottomGuard && touch.location.y <= Screen.height - topGuard) {
 			player.moveTargetX = Math.max(40, Math.min(GameConfig.MAP_WIDTH - 40, touch.location.x));
 		}
 	});
@@ -446,7 +450,9 @@ export function GameScene(): Node.Type {
 		// 天空 / 夜幕贴图（随窗口尺寸重设，按状态显隐）
 		for (const item of skyArts) {
 			if (item.sprite === undefined) continue;
-			item.sprite.size = Size(Screen.width, Screen.height);
+			const cover = artCoverSize(item.id, Screen.width, Screen.height);
+			item.sprite.size = cover;
+			item.sprite.x = (Screen.width - cover.width) / 2;
 			item.sprite.visible =
 				item.id === 'sky_night'
 					? gs.phase === 'NIGHT'
@@ -1166,7 +1172,9 @@ export function GameScene(): Node.Type {
 
 	// 主循环 update 调度
 	scene.schedule((dt: number) => {
-		const clampedDt = Math.min(dt, 0.05);
+		// 全局节奏：把 dt 整体乘上 GAME_SPEED，移动 / 攻速 / 工期 / 招募 /
+		// 日夜循环 / 动画会一起放慢，手感一致。
+		const clampedDt = Math.min(dt, 0.05) * GameConfig.GAME_SPEED;
 		tickFx(clampedDt);
 
 		if (waitingVictoryModal) {

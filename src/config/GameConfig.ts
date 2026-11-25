@@ -242,9 +242,17 @@ export const GameConfig = {
 		},
 	},
 
+	// ---- 镜头取景 ----
+	// 镜头拉近的旋钮只有一个：Screen.WORLD_ZOOM（见 src/config/Screen.ts）。
+	// 那里同时按窗口像素尺寸做适配，保证任何分辨率下取景一致、界面不被放大。
+
+	// 全局节奏：1 = 原速。作用在每一帧的 dt 上，移动 / 攻速 / 工期 / 招募 /
+	// 日夜循环 / 动画速度会整体同步放慢，调一个数字即可改全局节奏。
+	GAME_SPEED: 0.78,
+
 	// 日夜循环常量
 	TOTAL_NIGHTS: 8,
-	DAY_DURATION: 45,
+	DAY_DURATION: 48,
 	DUSK_WARNING_TIME: 10,
 	FOOD_CONSUME_INTERVAL: 5,
 	FOOD_CONSUME_PER_COMBAT_UNIT: 2,

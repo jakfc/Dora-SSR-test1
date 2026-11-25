@@ -28,16 +28,18 @@ function drawRect(
  */
 export function TitleScene(): Node.Type {
 	const scene = Node();
+	// 标题属于 UI 空间：单位与设计分辨率一致，镜头拉近时不会被一起放大
+	Screen.attachUi(scene);
 	// 可视区域尺寸与设计框偏移（窗口尺寸变化时本场景会被 SceneManager 重建）
-	const W = Screen.width;
-	const H = Screen.height;
-	const OY = Screen.offsetY;
+	const W = Screen.uiWidth;
+	const H = Screen.uiHeight;
+	const OY = Screen.uiOffsetY;
 
 	// 水墨风背景与城墙剪影
 	const bg = DrawNode();
 	drawRect(bg, 0, 0, W, H, 0xff161e29);
 	// 远山剪影
-	const ox = Screen.offsetX;
+	const ox = Screen.uiOffsetX;
 	bg.drawPolygon(
 		[
 			Vec2(0, 140),
