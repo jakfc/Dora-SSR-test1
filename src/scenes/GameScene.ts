@@ -2,14 +2,14 @@ import { Color, DrawNode, KeyName, Keyboard, Label, Node, Size, Sprite, Vec2 } f
 import { SceneManager } from 'src/scenes/SceneManager';
 import { EnemyType, GameConfig, LandmarkId, ProjectKind, VillagerRole } from 'src/config/GameConfig';
 import { Screen } from 'src/config/Screen';
-import { artAt, artCover, artCoverSize, artInto, artStretch } from 'src/config/Assets';
+import { artAt, artCover, artCoverSize, artInto, artReady, artStretch } from 'src/config/Assets';
 import { GameState, BuildProject } from 'src/config/GameState';
 import { DefenseTower } from 'src/entities/DefenseTower';
 import { Enemy } from 'src/entities/Enemy';
 import { Player } from 'src/entities/Player';
 import { ToolDrop, Villager } from 'src/entities/Villager';
 import { HudLayer } from 'src/ui/HudLayer';
-import { playFx, tickFx } from 'src/ui/Fx';
+import { animateMoveY, playFx, pulseNode, tickFx } from 'src/ui/Fx';
 import { soundBgm, soundSfx } from 'src/audio/Sound';
 
 interface ScavengeDrop {
@@ -178,13 +178,40 @@ export function GameScene(): Node.Type {
 	worldLayer.addChild(groundDraw);
 
 	// 地面 / 滩涂贴图：横向平铺（有素材时盖住程序化地面）
+	// 同一张 640 宽的图铺满 7600 像素的地图，一眼就能看出「一格一格」。
+	// 三招打散重复感：① 有变体图就轮换；② 隔块水平镜像；③ 每块 ±2 像素微抖。
+	// 最后再撒一层地物碎屑（石块/草簇/贝壳），把等距的节拍彻底打乱。
 	const groundArtNode = Node();
 	worldLayer.addChild(groundArtNode);
+	const GROUND_TILE = 640;
+	// 固定种子伪随机：同一局每次重绘结果一致（不会闪），但相邻两块取法不同
+	const groundRand = (n: number): number => {
+		const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+		return v - Math.floor(v);
+	};
 	if (artAt(groundArtNode, 'ground_beach', westSeaEnd, 0) !== undefined) {
-		for (let x = westSeaEnd; x < cityMinX; x += 640) artAt(groundArtNode, 'ground_beach', x, 0);
-		for (let x = cityMaxX; x < GameConfig.MAP_WIDTH; x += 640) artAt(groundArtNode, 'ground_beach', x, 0);
+		const variantOf = (base: string, list: string[], seed: number): string => {
+			const pick = list[Math.floor(groundRand(seed) * list.length)];
+			return pick !== undefined && artReady(pick) ? pick : base;
+		};
+		let tileIndex = 0;
+		const layRow = (from: number, to: number, base: string, variants: string[]) => {
+			for (let x = from; x < to; x += GROUND_TILE) {
+				const id = variantOf(base, variants, tileIndex * 3.7);
+				// 微抖只往上抖（ay=0 贴底：y 为负会在贴图下沿露出空隙），同时错开接缝
+				const node = artAt(groundArtNode, id, x, groundRand(tileIndex * 9.1) * 3);
+				// 镜像要连带把 x 挪回一格：这类贴图 ax=0（贴左），翻转后内容会跑到左边去
+				if (node !== undefined && groundRand(tileIndex * 5.3) < 0.5) {
+					node.scaleX = -1;
+					node.x = x + GROUND_TILE;
+				}
+				tileIndex++;
+			}
+		};
+		layRow(westSeaEnd, cityMinX, 'ground_beach', ['ground_beach_b', 'ground_beach_c']);
+		layRow(cityMaxX, GameConfig.MAP_WIDTH, 'ground_beach', ['ground_beach_b', 'ground_beach_c']);
 		if (artAt(groundArtNode, 'ground_city', cityMinX, 0) !== undefined) {
-			for (let x = cityMinX; x < cityMaxX; x += 640) artAt(groundArtNode, 'ground_city', x, 0);
+			layRow(cityMinX, cityMaxX, 'ground_city', ['ground_city_b']);
 		}
 		groundDraw.clear();
 		// 两头海面重新盖回（铺贴图时不能让滩涂越界到海里）
@@ -192,6 +219,24 @@ export function GameScene(): Node.Type {
 		drawRect(seaDraw, 0, 0, westSeaEnd, GameConfig.GROUND_Y, 0xff1e4e79);
 		drawRect(seaDraw, eastSeaStart, 0, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.GROUND_Y, 0xff1e4e79);
 		worldLayer.addChild(seaDraw);
+
+		// 地物碎屑层：按种子撒在滩涂与堡内地面上，压掉贴图的等距节拍
+		if (artReady('ground_decals')) {
+			const decalNode = Node();
+			worldLayer.addChild(decalNode);
+			for (let i = 0; i < Math.floor(GameConfig.MAP_WIDTH / 130); i++) {
+				const dx = 40 + groundRand(i * 1.7) * (GameConfig.MAP_WIDTH - 80);
+				if (dx < westSeaEnd || dx > eastSeaStart) continue;
+				// 只贴在地平线附近，别飘到天上去
+				const dy = GameConfig.GROUND_Y - 6 - groundRand(i * 2.9) * 44;
+				const node = artAt(decalNode, 'ground_decals', dx, dy);
+				if (node === undefined) continue;
+				// 每处随机镜像 + 随机缩放 + 随机透明度，看上去就不是同一张图
+				const flip = groundRand(i * 4.1) < 0.5 ? -1 : 1;
+				node.scaleX = flip * (0.7 + groundRand(i * 6.7) * 0.7);
+				node.opacity = 0.45 + groundRand(i * 8.3) * 0.55;
+			}
+		}
 	}
 
 	// 绘制静态地标（宗祠、水田、盐课司、主城墙、东西滩头）
@@ -336,11 +381,44 @@ export function GameScene(): Node.Type {
 	worldLayer.addChild(gatesDraw);
 
 	// 城门 / 宗祠贴图挂点（有素材时替代方块；同一挂点按状态切换 id，不会重复创建）
-	const gateArtNode = Node(); // 东门：闭门 / 开门 / 破损
+	const gateArtNode = Node(); // 东门门楼：只换等级 / 破损，形状不随开闭变
 	const innerGateArtNode = Node(); // 内城水门：完好 / 破损
 	const shrineArtNode = Node(); // 王氏宗祠：1 级 / 2 级
+	// 东门闸门（单独一个节点）：只有它上下滑，门楼本体不动。
+	// 原来整座门楼往上跳 90px + 换成 cropTop 的另一张图，所以看着很割裂。
+	const portcullisNode = Node();
+	const portcullisDraw = DrawNode();
+	let gateLiftTarget = 0; // 0 = 落闸，1 = 提闸
+	let gateLift = 0; // 当前插值位置
+	let gateLiftPrev = 0;
+	let portcullisDrawBuilt = false;
+
+	/**
+	 * 城门铁闸缓动：只有闸门杆件沿门洞上下滑，门楼本体一动不动。
+	 * 位置用 smoothstep 插值（起落有重量感），落到底/提到顶各响一次尘烟。
+	 */
+	const tickGate = (rawDt: number) => {
+		const dt = Math.min(rawDt, 0.05);
+		const speed = 1.7; // 每秒推进的比例，约 0.6 秒走完全程
+		const before = gateLift;
+		if (gateLift < gateLiftTarget) gateLift = Math.min(gateLiftTarget, gateLift + speed * dt);
+		else if (gateLift > gateLiftTarget) gateLift = Math.max(gateLiftTarget, gateLift - speed * dt);
+		if (gateLift === before) return;
+		const e = gateLift * gateLift * (3 - 2 * gateLift); // smoothstep
+		const eastLm = GameConfig.MAP_LANDMARKS.EAST_GATE;
+		portcullisNode.x = eastLm.x;
+		portcullisNode.y = GameConfig.GROUND_Y + e * 74;
+		// 闸门刚开始下沉时扬一层灰，落地那下更实
+		if (gateLift === 0 && gateLiftPrev > 0) {
+			playFx(worldLayer, 'fx_arrow_hit', eastLm.x, GameConfig.GROUND_Y + 10, 0.34, 0.6, 14);
+		} else if (gateLift === 1 && gateLiftPrev < 1) {
+			playFx(worldLayer, 'fx_arrow_hit', eastLm.x, GameConfig.GROUND_Y + 84, 0.26, 0.4, 12);
+		}
+		gateLiftPrev = gateLift;
+	};
 	worldLayer.addChild(innerGateArtNode);
 	worldLayer.addChild(gateArtNode);
+	worldLayer.addChild(portcullisNode);
 	worldLayer.addChild(shrineArtNode);
 
 	// 夜间火把光点
@@ -646,11 +724,11 @@ export function GameScene(): Node.Type {
 			);
 		}
 
-		// 东门瓮城（开 / 闭 / 破损三态）
+		// 东门瓮城：门楼只按「等级 / 破损」换模型，开闭只体现为闸门升降
 		const eastLm = GameConfig.MAP_LANDMARKS.EAST_GATE;
+		gateArtNode.x = eastLm.x;
+		gateArtNode.y = GameConfig.GROUND_Y;
 		if (gs.eastGateHp <= 0) {
-			gateArtNode.x = eastLm.x;
-			gateArtNode.y = GameConfig.GROUND_Y;
 			if (artInto(gateArtNode, 'lm_EAST_GATE_broken') === undefined) {
 				drawRect(
 					gatesDraw,
@@ -661,36 +739,36 @@ export function GameScene(): Node.Type {
 					0xff2d3748
 				);
 			}
-		} else if (gs.eastGateOpen) {
-			// 开启状态：仅上方门楼，下方通行
-			gateArtNode.x = eastLm.x;
-			gateArtNode.y = GameConfig.GROUND_Y + 90;
-			if (artInto(gateArtNode, 'lm_EAST_GATE_open') === undefined) {
-				drawRect(
-					gatesDraw,
-					eastLm.x - eastLm.width / 2,
-					GameConfig.GROUND_Y + 90,
-					eastLm.width,
-					eastLm.height - 90,
-					eastLm.color,
-					0xff68d391
-				);
+		} else if (artInto(gateArtNode, landmarkArtId('EAST_GATE')) === undefined) {
+			drawRect(
+				gatesDraw,
+				eastLm.x - eastLm.width / 2,
+				GameConfig.GROUND_Y,
+				eastLm.width,
+				eastLm.height,
+				eastLm.color,
+				0xfff6ad55
+			);
+		}
+
+		// 闸门：独立节点，位置交给每帧的滑轨插值，这里只管素材与开关目标
+		portcullisNode.x = eastLm.x;
+		gateLiftTarget = gs.eastGateHp > 0 && gs.eastGateOpen ? 1 : 0;
+		if (gs.eastGateHp <= 0) gateLift = 1; // 破损：闸门已毁，不再重画
+		portcullisDraw.clear();
+		if (gs.eastGateHp > 0) {
+			portcullisNode.visible = true;
+			if (artInto(portcullisNode, 'gate_portcullis') === undefined && !portcullisDrawBuilt) {
+				// 无素材时的程序化铁栅门（落在门洞口，向上提入楼内）
+				for (let i = -2; i <= 2; i++) {
+					drawRect(portcullisDraw, i * 12 - 3, 0, 6, 74, 0xff2d3748, 0xff718096);
+				}
+				drawRect(portcullisDraw, -34, 70, 68, 8, 0xff4a5568, 0xff1a202c);
+				portcullisNode.addChild(portcullisDraw);
+				portcullisDrawBuilt = true;
 			}
 		} else {
-			// 关闭状态：全封闭瓮城铁门
-			gateArtNode.x = eastLm.x;
-			gateArtNode.y = GameConfig.GROUND_Y;
-			if (artInto(gateArtNode, landmarkArtId('EAST_GATE')) === undefined) {
-				drawRect(
-					gatesDraw,
-					eastLm.x - eastLm.width / 2,
-					GameConfig.GROUND_Y,
-					eastLm.width,
-					eastLm.height,
-					eastLm.color,
-					0xfff6ad55
-				);
-			}
+			portcullisNode.visible = false;
 		}
 	};
 
@@ -963,7 +1041,9 @@ export function GameScene(): Node.Type {
 		refreshEnvironmentVisuals();
 	};
 
-	// 银袋抛物线：投银时飞向升级点（程序化小方块，无美术也看得见）
+	/**
+	 * 银袋抛物线：投银时飞向升级点（专用美术缺失时退回程序化小方块，不影响可读性）
+	 */
 	const silverThrows: {
 		node: Node.Type;
 		t: number;
@@ -975,9 +1055,11 @@ export function GameScene(): Node.Type {
 	const spawnSilverThrow = (x0: number, x1: number) => {
 		soundSfx('coin_silver');
 		const n = Node();
-		const d = DrawNode();
-		drawRect(d, -8, -8, 16, 16, 0xfff6e05e, 0xff744210);
-		n.addChild(d);
+		if (artAt(n, 'fx_silver_pouch', 0, 0) === undefined) {
+			const d = DrawNode();
+			drawRect(d, -8, -8, 16, 16, 0xfff6e05e, 0xff744210);
+			n.addChild(d);
+		}
 		n.x = x0;
 		n.y = GameConfig.GROUND_Y + 46;
 		worldLayer.addChild(n);
@@ -989,6 +1071,25 @@ export function GameScene(): Node.Type {
 			x1,
 			y1: GameConfig.GROUND_Y + 34,
 		});
+	};
+
+	/**
+	 * 「钱袋子飘银」：银钱离袋时，从钱袋位置往上飘一枚银钱并逐渐化去。
+	 * 配合 `-N 两` 飘字，让「我确实花了这笔银」看得见。
+	 */
+	const silverRises: { node: Node.Type; t: number }[] = [];
+	const spawnSilverRise = (x: number, amount: number) => {
+		const n = Node();
+		if (artAt(n, 'fx_silver_rise', 0, 0) === undefined) {
+			const d = DrawNode();
+			drawRect(d, -5, -9, 10, 18, 0xfff6e05e, 0xff744210);
+			n.addChild(d);
+		}
+		n.x = x;
+		n.y = GameConfig.GROUND_Y + 38;
+		worldLayer.addChild(n);
+		silverRises.push({ node: n, t: 0 });
+		addFloatingText(`-${amount} ${GameConfig.SILVER_NAME}`, x, GameConfig.GROUND_Y + 104, 0xfff6e05e);
 	};
 
 	/** 投银点账目：key → 显示名与所需总额（供 HUD 显示“还差多少”） */
@@ -1018,6 +1119,33 @@ export function GameScene(): Node.Type {
 	 * 投一袋银两到升级点：捐满 cost 才动工，多投的留在池里下次接着攒。
 	 * 所有升级/建造/置办/招募都走这里——“银两升级都得人跑过去扔”。
 	 */
+	const pulseArtAtX = (x: number, intensity = 0.07, dur = 0.30) => {
+		if (Math.abs(x - GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x) < 40) {
+			pulseNode(shrineArtNode, intensity, dur);
+			return;
+		}
+		if (Math.abs(x - GameConfig.MAP_LANDMARKS.INNER_GATE.x) < 40) {
+			pulseNode(innerGateArtNode, intensity, dur);
+			return;
+		}
+		if (Math.abs(x - GameConfig.MAP_LANDMARKS.EAST_GATE.x) < 40) {
+			pulseNode(gateArtNode, intensity, dur);
+			return;
+		}
+		for (const id of landmarkArtRow) {
+			if (Math.abs(x - GameConfig.MAP_LANDMARKS[id].x) < 40) {
+				pulseNode(landmarkArtNodes[id], intensity, dur);
+				return;
+			}
+		}
+		for (let i = 0; i < gs.houses.length; i++) {
+			if (Math.abs(x - gs.houses[i].x) < 30) {
+				pulseNode(houseArtNodes[i], intensity, dur);
+				return;
+			}
+		}
+	};
+
 	const throwSilver = (
 		purpose: string,
 		targetX: number,
@@ -1026,20 +1154,33 @@ export function GameScene(): Node.Type {
 		onFull: () => void
 	) => {
 		rememberDonation(purpose, label, cost);
-		const bag = GameConfig.SILVER_BAG;
+		// 银两的最小面额就是 1 两：还差多少就投多少，最后一袋可能只投 1 两。
+		// 所以这里不再固定投一整袋，而是按差额截断。
+		const remain = Math.max(1, cost - gs.donationOf(purpose));
+		const bag = Math.min(GameConfig.SILVER_BAG, remain);
 		if (gs.silver < bag) {
-			hud.showToast(`白银不足，投一袋需 ${bag} 两（现有 ${gs.silver} 两）。`, 2.0);
+			hud.showToast(
+				`白银不足，还差 ${remain} ${GameConfig.SILVER_NAME}（现有 ${gs.silver} ${GameConfig.SILVER_NAME}）。`,
+				2.0
+			);
 			return;
 		}
 		gs.spendSilver(bag);
+		spawnSilverRise(player.x + player.facing * 10, bag);
 		spawnSilverThrow(player.x + player.facing * 18, targetX);
+		pulseArtAtX(targetX, 0.06, 0.28);
+		playFx(worldLayer, 'fx_arrow_hit', targetX, GameConfig.GROUND_Y + 46, 0.25, 0.3, 10);
 		const total = gs.addDonation(purpose, bag);
 		if (total >= cost) {
 			gs.clearDonation(purpose);
+			pulseArtAtX(targetX, 0.10, 0.38);
 			onFull();
 			return;
 		}
-		hud.showToast(`【${label}】已投 ${total}/${cost} 两，继续投银。`, 1.6);
+		hud.showToast(
+			`【${label}】已投 ${total}/${cost} ${GameConfig.SILVER_NAME}，继续投银。`,
+			1.6
+		);
 	};
 
 	/** 站在哪间民居的投银点旁（-1 = 不在任何民居旁） */
@@ -1063,8 +1204,26 @@ export function GameScene(): Node.Type {
 		return GameConfig.HOUSE_UPGRADE_COST_LV2;
 	};
 
-	/** [F] 撒银退敌：给最近的倭寇一笔银子，让他掉头离场（头目只买得到一瞬喘息） */
-	const bribeNearestEnemy = () => {
+	/**
+	 * 普通攻击（空格 / L / HUD「出拳」）：不位移的短打。
+	 * 麒麟步是「冲过去一记重手」，这个是站着也能连的平A，两者冷却各算各的。
+	 */
+	const lightAttack = (): void => {
+		if (waitingVictoryModal) return;
+		const res = player.triggerLightAttack(enemies);
+		if (!res.triggered) return;
+		if (res.hitCount > 0) {
+			// 命中才飘字，抡空不脏屏；命中的敌人头顶另起一个小火花
+			addFloatingText(
+				res.hitCount > 1 ? `连击 ×${res.hitCount}` : '中！',
+				player.x + player.facing * 40,
+				GameConfig.GROUND_Y + 78,
+				0xfffbd38d
+			);
+		}
+	};
+
+	/** [F] 撒银退敌：给最近的倭寇一笔银子，让他掉头离场（头目只买得到一瞬喘息） */	const bribeNearestEnemy = () => {
 		if (waitingVictoryModal) return;
 		let target: Enemy | undefined = undefined;
 		let bestDist = GameConfig.BRIBE_RANGE;
@@ -1082,16 +1241,17 @@ export function GameScene(): Node.Type {
 		}
 		const cost = GameConfig.BRIBE_COST[target.type];
 		if (gs.silver < cost) {
-			hud.showToast(`买命需 ${cost} 两白银，库中不足！`, 1.8);
+			hud.showToast(`买命需 ${cost} ${GameConfig.SILVER_NAME}，库中不足！`, 1.8);
 			return;
 		}
 		gs.spendSilver(cost);
+		spawnSilverRise(player.x + player.facing * 10, cost);
 		spawnSilverThrow(player.x + player.facing * 18, target.x);
 		target.bribe();
 		if (target.type === 'BOSS') {
-			hud.showToast(`塞了 ${cost} 两给倭酋，只撂得他踉跄一阵！`, 2.4);
+			hud.showToast(`塞了 ${cost} ${GameConfig.SILVER_NAME}给倭酋，只撂得他踉跄一阵！`, 2.4);
 		} else {
-			hud.showToast(`付 ${cost} 两买命，倭寇收银退兵。`, 2.0);
+			hud.showToast(`付 ${cost} ${GameConfig.SILVER_NAME}买命，倭寇收银退兵。`, 2.0);
 		}
 	};
 
@@ -1333,6 +1493,9 @@ export function GameScene(): Node.Type {
 				return;
 			}
 			gs.eastGateOpen = !gs.eastGateOpen;
+			soundSfx('gate_open');
+			pulseNode(gateArtNode, 0.06, 0.32);
+			playFx(worldLayer, 'fx_arrow_hit', GameConfig.MAP_LANDMARKS.EAST_GATE.x, GameConfig.GROUND_Y + 42, 0.35, 0.55, 16);
 			hud.showToast(gs.eastGateOpen ? '东门已开启，族丁可出城拾荒。' : '东门已关闭，瓮城严阵以待！', 2.0);
 			refreshEnvironmentVisuals();
 		} else if (landmark === 'WEST_SALT_FLAT' || landmark === 'EAST_SALT_FLAT') {
@@ -1382,6 +1545,7 @@ export function GameScene(): Node.Type {
 			}
 		},
 		onInteract: (optionIndex) => handleInteract(optionIndex),
+		onLightAttack: () => lightAttack(),
 		onQilinStep: () => {
 			if (waitingVictoryModal) return;
 			const res = player.triggerQilinStep(enemies);
@@ -1426,6 +1590,8 @@ export function GameScene(): Node.Type {
 		// 日夜循环 / 动画会一起放慢，手感一致。
 		const clampedDt = Math.min(dt, 0.05) * GameConfig.GAME_SPEED;
 		tickFx(clampedDt);
+		// 城门铁闸：帧级缓动升降（闸门作为独立杆件滑进气槽，不再换图不硬跳）
+		tickGate(dt);
 
 		if (waitingVictoryModal) {
 			const boss = findBoss(enemies);
@@ -1446,6 +1612,8 @@ export function GameScene(): Node.Type {
 		if (Keyboard.isKeyPressed(KeyName.D) || Keyboard.isKeyPressed(KeyName.Right)) moveInput += 1;
 
 		if (Keyboard.isKeyDown(KeyName.E)) handleInteract(0);
+		// 普通攻击：空格或 L（按下即出，不等释放），快节奏连段
+		if (Keyboard.isKeyPressed(KeyName.Space) || Keyboard.isKeyPressed(KeyName.L)) lightAttack();
 		if (Keyboard.isKeyDown(KeyName.J)) {
 			const res = player.triggerQilinStep(enemies);
 			if (res.triggered) {
@@ -1679,6 +1847,21 @@ export function GameScene(): Node.Type {
 			bag.node.x = bag.x0 + (bag.x1 - bag.x0) * bag.t;
 			bag.node.y =
 				bag.y0 + (bag.y1 - bag.y0) * bag.t + Math.sin(bag.t * Math.PI) * 44;
+		}
+
+		// 6.3 钱袋飘银：银钱从钱袋往上飘，飘完化掉
+		for (let i = silverRises.length - 1; i >= 0; i--) {
+			const rise = silverRises[i];
+			rise.t += clampedDt / 0.7;
+			const k = Math.min(1, rise.t);
+			const ease = 1 - (1 - k) * (1 - k);
+			rise.node.y = GameConfig.GROUND_Y + 38 + ease * 58;
+			rise.node.opacity = 1 - ease;
+			rise.node.scaleX = 1 + ease * 0.35;
+			if (k >= 1) {
+				rise.node.removeFromParent();
+				silverRises.splice(i, 1);
+			}
 		}
 
 		// 6. 更新飘字

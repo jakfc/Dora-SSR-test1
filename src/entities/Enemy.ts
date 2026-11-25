@@ -191,7 +191,8 @@ export class Enemy {
 			artHide(this.artNode);
 			return;
 		}
-		this.animClock += dt;
+		// 动画时钟不走 GAME_SPEED 的减速，和族丁/主角一致，保持步伐颚率
+		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
 		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
 		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
 		// 逐帧图默认朝左；西面来敌整体镜像

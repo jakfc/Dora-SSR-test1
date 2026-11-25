@@ -24,9 +24,10 @@ export class Screen {
 	/**
 	 * 镜头拉近倍数。
 	 * 1.0 = 设计原尺寸（一个设计框 1280x720 铺满可视区，宽屏两侧会多看到世界）
-	 * 1.4 = 当前手感：可视世界约 1280/1.4 ≈ 915 单位宽，人物/建筑明显放大
+	 * 1.85 = 当前手感：可视世界约 1280/1.85 ≈ 690 单位宽，
+	 *        人物和屋舍看得清，水田/盐田也正好摆在画面里而不显空旷。
 	 */
-	public static readonly WORLD_ZOOM = 1.4;
+	public static readonly WORLD_ZOOM = 1.85;
 
 	private static camZoom = 1;
 	private static uiZoom = 1;

@@ -38,6 +38,7 @@ export class Player {
 	public moveTargetX: number | undefined = undefined;
 
 	public attackCooldownTimer = 0;
+	public lightCooldownTimer = 0;
 	public rallyCooldownTimer = 0;
 	public auraTimer = 0;
 	private slashFxTimer = 0;
@@ -137,7 +138,7 @@ export class Player {
 			artHide(this.artNode);
 			return;
 		}
-		this.animClock += dt;
+		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
 		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
 		artAnimInto(this.artNode, 'player_idle', prefix, this.animClock * fps);
 		artAnimFace(this.artNode, 'player_idle', this.facing < 0);
@@ -147,6 +148,9 @@ export class Player {
 		this.tickAnim(dt);
 		if (this.attackCooldownTimer > 0) {
 			this.attackCooldownTimer = Math.max(0, this.attackCooldownTimer - dt);
+		}
+		if (this.lightCooldownTimer > 0) {
+			this.lightCooldownTimer = Math.max(0, this.lightCooldownTimer - dt);
 		}
 		if (this.rallyCooldownTimer > 0) {
 			this.rallyCooldownTimer = Math.max(0, this.rallyCooldownTimer - dt);
@@ -218,7 +222,16 @@ export class Player {
 		this.auraTimer = GameConfig.PLAYER.auraDuration;
 		this.slashFxTimer = 0.22;
 		this.moveTargetX = undefined;
-		// 刀光：贴在身体前方，朝左时自动镜像
+
+		const oldX = this.x;
+		this.x = Math.max(
+			40,
+			Math.min(GameConfig.MAP_WIDTH - 40, this.x + this.facing * GameConfig.PLAYER.dashDistance)
+		);
+		this.node.x = this.x;
+
+		// 刀光必须画在「冲拳之后」的位置：先位移再出光，否则光会留在起手点、
+		// 人已经窜出去一个身位，看起来就是「特效位置不对」。
 		playFx(
 			this.node.parent,
 			'fx_slash',
@@ -229,13 +242,17 @@ export class Player {
 			0,
 			this.facing < 0
 		);
-
-		const oldX = this.x;
-		this.x = Math.max(
-			40,
-			Math.min(GameConfig.MAP_WIDTH - 40, this.x + this.facing * GameConfig.PLAYER.dashDistance)
+		// 身后补一道残影，让 110 像素的位移有轨迹感
+		playFx(
+			this.node.parent,
+			'fx_slash',
+			(oldX + this.x) / 2,
+			GameConfig.GROUND_Y + 44,
+			0.2,
+			0.6,
+			0,
+			this.facing < 0
 		);
-		this.node.x = this.x;
 
 		let hitCount = 0;
 		for (const enemy of enemies) {
@@ -252,6 +269,51 @@ export class Player {
 			}
 		}
 
+		this.redrawFx();
+		return { triggered: true, hitCount };
+	}
+
+	/**
+	 * 普通攻击：短平快的一拳，原地出手、可连按（Space / L / 点按「拳」键）。
+	 * 与麒麟步的区别：麒麟步是带 110 像素突进的爆发技（冷却长），
+	 * 普通攻击是站桩小连段（冷却短、伤害低、无位移），用来补刀和打断。
+	 */
+	public triggerLightAttack(enemies: Enemy[]): { triggered: boolean; hitCount: number } {
+		if (this.lightCooldownTimer > 0) {
+			return { triggered: false, hitCount: 0 };
+		}
+		this.lightCooldownTimer = GameConfig.PLAYER.lightCooldown;
+		soundSfx('sword_slash');
+		// 复用 attack 帧：slashFxTimer 期间 tickAnim 会切到 player_attack_* 动画
+		this.slashFxTimer = Math.max(this.slashFxTimer, 0.16);
+		this.moveTargetX = undefined;
+
+		playFx(
+			this.node.parent,
+			'fx_slash',
+			this.x + this.facing * 34,
+			GameConfig.GROUND_Y + 46,
+			0.18,
+			0.28,
+			0,
+			this.facing < 0
+		);
+
+		let hitCount = 0;
+		const range = GameConfig.PLAYER.lightRange;
+		for (const enemy of enemies) {
+			if (enemy.dead) continue;
+			const dx = enemy.x - this.x;
+			const inFront =
+				this.facing > 0 ? dx >= -16 && dx <= range : dx <= 16 && dx >= -range;
+			if (inFront) {
+				enemy.takeDamage(
+					GameConfig.PLAYER.lightDamage,
+					this.facing * GameConfig.PLAYER.lightKnockback
+				);
+				hitCount++;
+			}
+		}
 		this.redrawFx();
 		return { triggered: true, hitCount };
 	}

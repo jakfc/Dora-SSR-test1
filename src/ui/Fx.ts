@@ -12,7 +12,50 @@ interface FxItem {
 	sign: number;
 }
 
+interface PulseItem {
+	node: Node.Type;
+	t: number;
+	dur: number;
+	intensity: number;
+}
+
+interface MoveYItem {
+	node: Node.Type;
+	fromY: number;
+	toY: number;
+	t: number;
+	dur: number;
+}
+
 const items: FxItem[] = [];
+const pulses: PulseItem[] = [];
+const moveYs: MoveYItem[] = [];
+
+/** 让建筑/场景节点播放一次 Q 弹交互回弹动画（投银、置办工具、竣工升级时调用）。 */
+export function pulseNode(node: Node.Type | undefined, intensity = 0.08, dur = 0.32): void {
+	if (node === undefined) return;
+	for (let i = pulses.length - 1; i >= 0; i--) {
+		if (pulses[i].node === node) {
+			pulses.splice(i, 1);
+		}
+	}
+	pulses.push({ node, t: 0, dur, intensity });
+}
+
+/** 平滑移动节点的 Y 坐标（例如东门瓮城闸门升降）。 */
+export function animateMoveY(node: Node.Type | undefined, toY: number, dur = 0.42): void {
+	if (node === undefined) return;
+	for (let i = moveYs.length - 1; i >= 0; i--) {
+		if (moveYs[i].node === node) {
+			moveYs.splice(i, 1);
+		}
+	}
+	if (Math.abs(node.y - toY) < 1) {
+		node.y = toY;
+		return;
+	}
+	moveYs.push({ node, fromY: node.y, toY, t: 0, dur });
+}
 
 /**
  * 在世界层播一个一次性特效：life 秒内放大 grow 倍并淡出，然后自动回收。
@@ -72,6 +115,34 @@ export function tickFx(dt: number): void {
 			it.holder.y = it.baseY + it.rise * t;
 		}
 	}
+
+	for (let i = pulses.length - 1; i >= 0; i--) {
+		const p = pulses[i];
+		p.t += dt;
+		if (p.t >= p.dur) {
+			p.node.scaleX = 1;
+			p.node.scaleY = 1;
+			pulses.splice(i, 1);
+			continue;
+		}
+		const u = p.t / p.dur;
+		const wave = Math.sin(u * Math.PI * 2) * (1 - u);
+		p.node.scaleX = 1 + p.intensity * wave;
+		p.node.scaleY = 1 - p.intensity * wave;
+	}
+
+	for (let i = moveYs.length - 1; i >= 0; i--) {
+		const m = moveYs[i];
+		m.t += dt;
+		if (m.t >= m.dur) {
+			m.node.y = m.toY;
+			moveYs.splice(i, 1);
+			continue;
+		}
+		const u = m.t / m.dur;
+		const ease = 1 - (1 - u) * (1 - u) * (1 - u);
+		m.node.y = m.fromY + (m.toY - m.fromY) * ease;
+	}
 }
 
 /** 清场（切换场景时调用，避免残留节点）。 */
@@ -80,4 +151,10 @@ export function clearFx(): void {
 		it.holder.removeFromParent(true);
 	}
 	items.splice(0, items.length);
+	for (const p of pulses) {
+		p.node.scaleX = 1;
+		p.node.scaleY = 1;
+	}
+	pulses.splice(0, pulses.length);
+	moveYs.splice(0, moveYs.length);
 }

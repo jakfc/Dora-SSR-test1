@@ -57,6 +57,12 @@ export const ART: Record<string, ArtSpec> = {
 	// 地面横向平铺（每块 640x160 = 设计尺寸，正好等于 GROUND_Y）
 	'ground_city': { path: 'assets/bg/d04_ground_fortress.png', w: 640, h: 160, stretch: true, ax: 0, ay: 0 },
 	'ground_beach': { path: 'assets/bg/d05_ground_beach.png', w: 640, h: 160, stretch: true, ax: 0, ay: 0 },
+	// 地面变体：与主图同尺寸、可无缝拼接，隔一块换一张，打散 640 像素的重复格子感
+	'ground_beach_b': { path: 'assets/bg/d05_ground_beach_b.png', w: 640, h: 160, stretch: true, ax: 0, ay: 0 },
+	'ground_beach_c': { path: 'assets/bg/d05_ground_beach_c.png', w: 640, h: 160, stretch: true, ax: 0, ay: 0 },
+	'ground_city_b': { path: 'assets/bg/d04_ground_fortress_b.png', w: 640, h: 160, stretch: true, ax: 0, ay: 0 },
+	// 地面碎屑（碎石 / 草丛 / 贝壳），透明底，随机撒在地面上打断重复感
+	'ground_decals': { path: 'assets/bg/d12_ground_decals.png', w: 640, h: 96, stretch: true, ax: 0, ay: 0 },
 	'horizon': { path: 'assets/bg/d06_horizon_silhouette.png', w: 1280, h: 160, stretch: true, ax: 0, ay: 0 },
 
 	// 中景村舍 / 标题封面 / 结算画面
@@ -90,15 +96,17 @@ export const ART: Record<string, ArtSpec> = {
 	'lm_house_lv2': { path: 'assets/buildings/b12_house_lv2.png', w: 90 },
 	'lm_house_lv3': { path: 'assets/buildings/b12_house_lv3.png', w: 104 },
 	// 水田：荒地 → 熟田，每级一张（东西两块水田共用）
-	'lm_paddy_lv0': { path: 'assets/buildings/b02_paddy_lv0.png', w: 300, padBottom: 0.045 },
-	'lm_paddy_lv1': { path: 'assets/buildings/b02_paddy.png', w: 300, padBottom: 0.045 },
-	'lm_paddy_lv2': { path: 'assets/buildings/b02_paddy_lv2.png', w: 300, padBottom: 0.045 },
-	'lm_paddy_lv3': { path: 'assets/buildings/b02_paddy_lv3.png', w: 300, padBottom: 0.045 },
+	'lm_paddy_lv0': { path: 'assets/buildings/b02_paddy_lv0.png', w: 190, padBottom: 0.045 },
+	'lm_paddy_lv1': { path: 'assets/buildings/b02_paddy.png', w: 190, padBottom: 0.045 },
+	'lm_paddy_lv2': { path: 'assets/buildings/b02_paddy_lv2.png', w: 190, padBottom: 0.045 },
+	'lm_paddy_lv3': { path: 'assets/buildings/b02_paddy_lv3.png', w: 190, padBottom: 0.045 },
 	// 盐田：荒地 → 盐场，每级一张（东西两块盐田共用）
-	'lm_saltflat_lv0': { path: 'assets/buildings/b10_saltflat_lv0.png', w: 760, padBottom: 0.03 },
-	'lm_saltflat_lv1': { path: 'assets/bg/b10_outer_salt_flat.png', w: 760, padBottom: 0.03 },
-	'lm_saltflat_lv2': { path: 'assets/buildings/b10_saltflat_lv2.png', w: 760, padBottom: 0.03 },
-	'lm_saltflat_lv3': { path: 'assets/buildings/b10_saltflat_lv3.png', w: 760, padBottom: 0.03 },
+	'lm_saltflat_lv0': { path: 'assets/buildings/b10_saltflat_lv0.png', w: 470, padBottom: 0.03 },
+	'lm_saltflat_lv1': { path: 'assets/bg/b10_outer_salt_flat.png', w: 470, padBottom: 0.03 },
+	'lm_saltflat_lv2': { path: 'assets/buildings/b10_saltflat_lv2.png', w: 470, padBottom: 0.03 },
+	'lm_saltflat_lv3': { path: 'assets/buildings/b10_saltflat_lv3.png', w: 470, padBottom: 0.03 },
+	// 东门闸门：可上下滑动的铁闸（闭门落下 / 开门升起），与城门楼分开画，开关才不割裂
+	'gate_portcullis': { path: 'assets/buildings/b06_east_gate_portcullis.png', w: 62 },
 	// 敌台：lv1 是低矮炮台、lv2 画布更宽更高，按可见内容同宽折算保持像素比例
 	'tower_arrow': { path: 'assets/buildings/b07_tower_arrow.png', w: 72 },
 	'tower_cannon': { path: 'assets/buildings/b08_tower_cannon.png', w: 72, padBottom: 0.019 },
@@ -135,6 +143,9 @@ export const ART: Record<string, ArtSpec> = {
 
 	// 命中 / 施法特效
 	'fx_slash': { path: 'assets/sprites/props/fx_slash.png', w: 110, h: 110, stretch: true },
+	// 投银时从钱袋里浮起的一小串碎银（袋子本体 → 银花上浮 → 飘向升级点）
+	'fx_silver_pouch': { path: 'assets/sprites/props/fx_silver_pouch.png', h: 30 },
+	'fx_silver_rise': { path: 'assets/sprites/props/fx_silver_rise.png', w: 22, h: 30 },
 	'fx_arrow_hit': { path: 'assets/sprites/props/fx_arrow_hit.png', w: 44, h: 44, stretch: true },
 	'fx_cannon_hit': { path: 'assets/sprites/props/fx_cannon_hit.png', w: 60, h: 60, stretch: true },
 	'fx_recruit': { path: 'assets/sprites/props/fx_recruit.png', h: 200 },

@@ -215,7 +215,8 @@ export class Villager {
 			artHide(this.artNode);
 			return;
 		}
-		this.animClock += dt;
+		// 动画时钟不走 GAME_SPEED 的减速：否则 6 帧的走路循环会掉到 ~8fps，看起来一颜一颜的
+		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
 		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
 		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
 	}

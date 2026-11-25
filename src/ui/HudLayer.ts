@@ -78,6 +78,8 @@ export function createButton(
 export interface HudCallbacks {
 	onSkipDay: () => void;
 	onInteract: (optionIndex?: number) => void;
+	/** 普通攻击：短距离平A（空格 / L / 点按“拳”键） */
+	onLightAttack: () => void;
 	onQilinStep: () => void;
 	onRally: () => void;
 	onBribe: () => void;
@@ -94,7 +96,7 @@ export interface HudExtraInfo {
 	emptyLots: number;
 	/** 民居自然添丁进度 0~1 */
 	houseSpawn: number;
-	/** 当前地标的投银进度（例：「宗祠营建 120/180 两」） */
+	/** 当前地标的投银进度（例：「宗祠营建 12/18 两」） */
 	donation: string;
 }
 
@@ -282,6 +284,10 @@ export class HudLayer {
 		const btnE = createButton('[E] 交互', 92, 38, 0xff2f855a, () => this.callbacks.onInteract(0), 14);
 		this.node.addChild(btnE);
 
+		// 普通攻击：轻、快、可连段（麒麟步是位移重击，这个是站着也能打的平A）
+		const btnP = createButton('[空格] 出拳', 100, 38, 0xff718096, () => this.callbacks.onLightAttack(), 14);
+		this.node.addChild(btnP);
+
 		const btnJ = createButton('[J] 麒麟步', 98, 38, 0xffc05621, () => this.callbacks.onQilinStep(), 14);
 		this.node.addChild(btnJ);
 
@@ -320,7 +326,7 @@ export class HudLayer {
 		this.node.addChild(btnM);
 
 		// 布局时再定位，这里先记录引用（静音键排在最左）
-		this.skillButtons = [btnM, btnE, btnJ, btnK, btnF];
+		this.skillButtons = [btnM, btnE, btnP, btnJ, btnK, btnF];
 
 		// 地标多选项浮动按钮容器
 		this.extraActionNode = Node();
@@ -544,7 +550,7 @@ export class HudLayer {
 		if (this.dayIcon !== undefined) this.dayIcon.visible = gs.phase === 'DAY';
 		if (this.nightIcon !== undefined) this.nightIcon.visible = gs.phase === 'NIGHT';
 
-		this.silverLabel.text = `${gs.silver}`;
+		this.silverLabel.text = `${gs.silver} ${GameConfig.SILVER_NAME}`;
 		this.foodLabel.text = `${gs.food}${gs.isLowFood ? ' 断粮!' : ''}`;
 		this.foodLabel.color = Color(gs.isLowFood ? 0xfffc8181 : 0xfffefcbf);
 		this.popLabel.text = `${gs.populationCount}/${gs.maxPopulation}`;
@@ -643,7 +649,14 @@ export class HudLayer {
 		const gs = GameState.instance;
 
 		if (landmark === 'ANCESTRAL_HALL') {
-			const b1 = createButton('招募族丁 (80银)', 155, 34, 0xff2b6cb0, () => this.callbacks.onInteract(0), 13);
+			const b1 = createButton(
+				`招募族丁 (${GameConfig.RECRUIT_VILLAGER_COST}两)`,
+				155,
+				34,
+				0xff2b6cb0,
+				() => this.callbacks.onInteract(0),
+				13
+			);
 			const b2 = createButton(
 				`升级宗祠 Lv.${gs.ancestralHallLevel}→${Math.min(
 					gs.ancestralHallLevel + 1,
@@ -661,9 +674,18 @@ export class HudLayer {
 		} else if (landmark === 'INNER_GATE') {
 			const innerTower = gs.towers.find((t) => t.id === 'INNER_TOWER');
 			const towerUnlocked = innerTower !== undefined && innerTower.unlocked;
-			const b1 = createButton('置办木锤 (70银)', 155, 34, 0xffdd6b20, () => this.callbacks.onInteract(0), 13, 'icon_tool_hammer');
+			const innerTowerCost = GameConfig.TOWER_SLOTS.find((s) => s.id === 'INNER_TOWER')?.unlockCost ?? 0;
+			const b1 = createButton(
+				`置办木锤 (${GameConfig.ROLES.BUILDER.toolCost}两)`,
+				155,
+				34,
+				0xffdd6b20,
+				() => this.callbacks.onInteract(0),
+				13,
+				'icon_tool_hammer'
+			);
 			const b2 = createButton(
-				towerUnlocked ? `内城炮台 Lv.${gs.innerGateLevel}` : '解锁内城炮台 (150银)',
+				towerUnlocked ? `内城炮台 Lv.${gs.innerGateLevel}` : `解锁内城炮台 (${innerTowerCost}两)`,
 				160,
 				34,
 				0xff4a5568,
@@ -691,7 +713,7 @@ export class HudLayer {
 			const toolIcon = isPaddy ? 'icon_tool_hoe' : 'icon_tool_shovel';
 			const toolCost = isPaddy ? GameConfig.ROLES.FARMER.toolCost : GameConfig.ROLES.SALT_WORKER.toolCost;
 			const b1 = createButton(
-				`${toolText} (${toolCost}银)`,
+				`${toolText} (${toolCost}两)`,
 				150,
 				34,
 				0xffdd6b20,
@@ -702,7 +724,7 @@ export class HudLayer {
 			const maxed = level >= GameConfig.RECLAIM.MAX_LEVEL;
 			const nextCost = GameConfig.RECLAIM.COST[kind] * (level + 1);
 			const b2 = createButton(
-				maxed ? `熟田 Lv.${level}（已满）` : `开垦 Lv.${level}→${level + 1} (${nextCost}银)`,
+				maxed ? `熟田 Lv.${level}（已满）` : `开垦 Lv.${level}→${level + 1} (${nextCost}两)`,
 				190,
 				34,
 				maxed ? 0xff4a5568 : 0xff2f855a,
@@ -715,7 +737,7 @@ export class HudLayer {
 		} else if (landmark === 'SALT_OFFICE') {
 			const cost = GameConfig.ROLES.SALT_WORKER.toolCost;
 			const b1 = createButton(
-				`置办盐铲 (${cost}银)`,
+				`置办盐铲 (${cost}两)`,
 				150,
 				34,
 				0xffdd6b20,
@@ -725,8 +747,24 @@ export class HudLayer {
 			);
 			this.extraActionNode.addChild(b1);
 		} else if (landmark === 'MAIN_WALL') {
-			const b1 = createButton('置办长枪 (75银)', 155, 34, 0xff3182ce, () => this.callbacks.onInteract(0), 13, 'icon_tool_spear');
-			const b2 = createButton('置办拳谱 (110银)', 165, 34, 0xffe53e3e, () => this.callbacks.onInteract(1), 13, 'icon_tool_manual');
+			const b1 = createButton(
+				`置办长枪 (${GameConfig.ROLES.MILITIA.toolCost}两)`,
+				155,
+				34,
+				0xff3182ce,
+				() => this.callbacks.onInteract(0),
+				13,
+				'icon_tool_spear'
+			);
+			const b2 = createButton(
+				`置办拳谱 (${GameConfig.ROLES.KUNG_FU.toolCost}两)`,
+				165,
+				34,
+				0xffe53e3e,
+				() => this.callbacks.onInteract(1),
+				13,
+				'icon_tool_manual'
+			);
 			b2.x = 165;
 			this.extraActionNode.addChild(b1);
 			this.extraActionNode.addChild(b2);

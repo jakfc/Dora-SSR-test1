@@ -137,11 +137,11 @@ export const GameConfig = {
 	OUTER_ZONE_MAX_X: 7100,
 
 	// 初始资源与建筑参数
-	INITIAL_SILVER: 260,
+	INITIAL_SILVER: 26,
 	INITIAL_FOOD: 120,
 	INITIAL_MAX_POPULATION: 8,
 	POPULATION_PER_HALL_LEVEL: 4,
-	RECRUIT_VILLAGER_COST: 80,
+	RECRUIT_VILLAGER_COST: 8,
 
 	// ---- 民居（人口之源）----
 	// 人口上限 = min(住房容量, 粮食能养活的人数)；人慢慢从民居自然添丁，或花银子招募
@@ -156,30 +156,33 @@ export const GameConfig = {
 	HOUSE_CAPACITY_PER_LEVEL: 2,
 	HOUSE_BASE_HP: 400,
 	// 民居升级：直接投银（一袋 40 两）
-	HOUSE_BUILD_COST: 120,
-	HOUSE_UPGRADE_COST_LV2: 160,
-	HOUSE_UPGRADE_COST_LV3: 360,
+	HOUSE_BUILD_COST: 12,
+	HOUSE_UPGRADE_COST_LV2: 16,
+	HOUSE_UPGRADE_COST_LV3: 36,
 	// 民居自然添丁：每间民居每过这么多秒添一名族丁（有空位且粮食够时）
 	HOUSE_SPAWN_SECONDS: 22,
 	// 每个族丁要占的口粮：粮食决定人口上限
 	FOOD_PER_PERSON: 25,
 
 	// ---- 投银（银两升级都要人跑过去扔到升级点）----
-	// 一袋银子的面额，所有工程/招募都按袋投入
-	SILVER_BAG: 40,
+	// 银两的单位就是「两」，最低面额 1 两：投银时按还差多少截断，
+	// 最后一袋可能只投 1 两；所有花费/收益都写成整两，不再有「一袋＝四十两」的大面额。
+	SILVER_NAME: '两',
+	// 一次投银的默认袋重（不够时按差值截断，最少 1 两）
+	SILVER_BAG: 4,
 	// 掷出银袋的抛物线飞行时间
 	THROW_SECONDS: 0.45,
 	THROW_RANGE: 150,
 
 	// ---- 撒银退敌：给倭寇钱，让他们放弃追击 ----
 	BRIBE_RANGE: 300,
-	BRIBE_COST: { SCOUT: 40, SAMURAI: 80, BOSS: 240 } as Record<string, number>,
+	BRIBE_COST: { SCOUT: 4, SAMURAI: 8, BOSS: 24 } as Record<string, number>,
 	// 收钱后退回海边的秒数（BOSS 只买“愕一下”的喘息时间）
 	BRIBE_RETREAT_SECONDS: 8,
 	BRIBE_BOSS_STUN_SECONDS: 3.5,
 
 	ANCESTRAL_HALL_BASE_HP: 1000,
-	ANCESTRAL_HALL_UPGRADE_BASE_COST: 180,
+	ANCESTRAL_HALL_UPGRADE_BASE_COST: 18,
 	ANCESTRAL_HALL_MAX_LEVEL: 5,
 	ANCESTRAL_HALL_HP_PER_LEVEL: 300,
 	SPRING_BLESSING_HEAL_RATIO: 0.2,
@@ -224,31 +227,31 @@ export const GameConfig = {
 		dropSaltThreatRange: 520,
 		yardOffsetMin: -260,
 		yardOffsetMax: 260,
-		tripSilver: 120,
-		dropSilverIfCaught: 60,
+		tripSilver: 12,
+		dropSilverIfCaught: 6,
 	},
 	// 黄昏回城：白天剩余时间少于这个秒数时，城外族丁开始往城里跑
 	DUSK_RETURN_SECONDS: 12,
 	CURFEW_ALERT_SECONDS: 10,
 
 	INNER_GATE_BASE_HP: 600,
-	INNER_GATE_UPGRADE_COST: 140,
+	INNER_GATE_UPGRADE_COST: 14,
 	INNER_GATE_MAX_LEVEL: 3,
 	INNER_GATE_DEFENSE_X: 2280,
 
 	EAST_GATE_BASE_HP: 800,
-	EAST_GATE_UPGRADE_BASE_COST: 160,
+	EAST_GATE_UPGRADE_BASE_COST: 16,
 	EAST_GATE_MAX_LEVEL: 3,
 	EAST_GATE_DEFENSE_X: 3380,
 
 	// 敌台防御塔配置（东西两面滩头 + 城堡三道防线）
 	TOWER_SLOTS: [
-		{ id: 'WEST_SALT_TOWER', x: 1200, defaultType: 'ARROW' as TowerType, unlocked: false, unlockCost: 220 },
+		{ id: 'WEST_SALT_TOWER', x: 1200, defaultType: 'ARROW' as TowerType, unlocked: false, unlockCost: 22 },
 		{ id: 'WEST_TOWER', x: 2150, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
-		{ id: 'INNER_TOWER', x: 2450, defaultType: 'CANNON' as TowerType, unlocked: false, unlockCost: 150 },
+		{ id: 'INNER_TOWER', x: 2450, defaultType: 'CANNON' as TowerType, unlocked: false, unlockCost: 15 },
 		{ id: 'WALL_TOWER', x: 3150, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
 		{ id: 'EAST_TOWER', x: 3520, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
-		{ id: 'EAST_SALT_TOWER', x: 4650, defaultType: 'ARROW' as TowerType, unlocked: false, unlockCost: 220 },
+		{ id: 'EAST_SALT_TOWER', x: 4650, defaultType: 'ARROW' as TowerType, unlocked: false, unlockCost: 22 },
 	],
 	TOWER_STATS: {
 		ARROW: {
@@ -257,7 +260,7 @@ export const GameConfig = {
 			range: 420,
 			damage: 22,
 			cooldown: 1.1,
-			upgradeCost: 120,
+			upgradeCost: 12,
 			color: 0xff8c6d46,
 		},
 		CANNON: {
@@ -267,7 +270,7 @@ export const GameConfig = {
 			damage: 58,
 			splashRadius: 90,
 			cooldown: 2.6,
-			upgradeCost: 180,
+			upgradeCost: 18,
 			color: 0xff4a5568,
 		},
 	},
@@ -279,18 +282,21 @@ export const GameConfig = {
 	// 全局节奏：1 = 原速。作用在每一帧的 dt 上，移动 / 攻速 / 工期 / 招募 /
 	// 日夜循环 / 动画速度会整体同步放慢，调一个数字即可改全局节奏。
 	GAME_SPEED: 0.6,
+	// 动画补偿：GAME_SPEED 会把 dt 整体缩小，若动画时钟也跟着变慢，
+	// 6 帧的走路循环就会掉到 ~8fps 而显得卡顿。这里把动画时钟还原回真实时间。
+	ANIM_TIME_SCALE: 1 / 0.6,
 
 	// ---- 开垦：水田与盐田起始都是荒地，须投银 + 工期开垦才能产出 ----
 	RECLAIM: {
 		MAX_LEVEL: 3,
 		// 升到下一级需投的白银（每级累加）
-		COST: { PADDY: 120, SALT: 150 } as Record<string, number>,
+		COST: { PADDY: 12, SALT: 15 } as Record<string, number>,
 		// 开垦一级的基础工期（秒），每级 +25%
 		SECONDS: { PADDY: 11, SALT: 13 } as Record<string, number>,
 		// 每级水田追加的粮产（在农夫 ROLES.FARMER.produceAmount 基础上叠加）
 		PADDY_YIELD_PER_LEVEL: 15,
 		// 每级盐田追加的每趟出盐白银
-		SALT_YIELD_PER_LEVEL: 120,
+		SALT_YIELD_PER_LEVEL: 12,
 	},
 
 	// ---- 地图迷雾：未探索区域盖着黑幕，人走到跟前才揭形（《王国》式开拓感）----
@@ -311,8 +317,8 @@ export const GameConfig = {
 	FOOD_CONSUME_PER_COMBAT_UNIT: 2,
 
 	// 城外拾荒刷新
-	SCAVENGE_SALT_SILVER: 80,
-	SCAVENGE_WOOD_REPAIR: 50,
+	SCAVENGE_SALT_SILVER: 8,
+	SCAVENGE_WOOD_REPAIR: 5,
 	SCAVENGE_COUNT_PER_DAY: 4,
 
 	// 主角王叔杲参数
@@ -327,6 +333,11 @@ export const GameConfig = {
 		attackDamage: 45,
 		knockbackDistance: 65,
 		attackCooldown: 1.2,
+		// 普通攻击（Space / L / 点按“拳”键）：短距离平A，快、轻、可连段，不位移
+		lightRange: 82,
+		lightDamage: 24,
+		lightKnockback: 22,
+		lightCooldown: 0.42,
 		auraRadius: 250,
 		auraAttackSpeedBonus: 0.3,
 		auraDuration: 5.0,
@@ -363,7 +374,7 @@ export const GameConfig = {
 			name: '西滩水田',
 			subtitle: '荒地 · 待开垦',
 			x: 1950,
-			width: 300,
+			width: 190,
 			height: 44,
 			color: 0xff68a357,
 			description: '西城墙外的荒滩。须由工匠投银开垦成水田，农夫方能耕作产粮；等级越高，粮产越厚。',
@@ -419,7 +430,7 @@ export const GameConfig = {
 			name: '东滩水田',
 			subtitle: '荒地 · 待开垦',
 			x: 3850,
-			width: 300,
+			width: 190,
 			height: 44,
 			color: 0xff68a357,
 			description: '东城墙外的荒滩。须投银开垦成水田，农夫方能耕作产粮。',
@@ -431,7 +442,7 @@ export const GameConfig = {
 			name: '西滩盐田',
 			subtitle: '荒地 · 待开垦',
 			x: 1200,
-			width: 760,
+			width: 470,
 			height: 28,
 			color: 0xffb79f78,
 			description: '西面滩涂。须投银开垦成盐田，灶户方能晒盐背盐；等级越高，每趟出盐越多。',
@@ -443,7 +454,7 @@ export const GameConfig = {
 			name: '东滩盐田',
 			subtitle: '荒地 · 待开垦',
 			x: 4650,
-			width: 900,
+			width: 560,
 			height: 28,
 			color: 0xffb79f78,
 			description: '东面滩涂，灶户在此装盐；散落无主盐包(+80银)与漂流木料(+50修复)。黄昏前须全员撤回城内。',
@@ -485,7 +496,7 @@ export const GameConfig = {
 			role: 'FARMER',
 			name: '水田农夫',
 			toolName: '锄头',
-			toolCost: 50,
+			toolCost: 5,
 			color: 0xff48bb78,
 			maxHp: 90,
 			moveSpeed: 135,
@@ -501,7 +512,7 @@ export const GameConfig = {
 			role: 'SALT_WORKER',
 			name: '盐场灶户',
 			toolName: '盐铲',
-			toolCost: 60,
+			toolCost: 6,
 			color: 0xffecc94b,
 			maxHp: 90,
 			moveSpeed: 135,
@@ -509,7 +520,7 @@ export const GameConfig = {
 			attackRange: 40,
 			attackInterval: 1.5,
 			produceInterval: 3.0, // 在盐田装满一擔盐所需秒数
-			produceAmount: 120, // 背回盐课司一趟入库白银
+			produceAmount: 12, // 背回盐课司一趟入库白银
 			repairPerSec: 0,
 			description: '白昼出城到城外盐田装盐，再背回盐课司入库(每趟120银)。负重跑得慢，黄昏前赶不回来就会死在城外。',
 		},
@@ -517,7 +528,7 @@ export const GameConfig = {
 			role: 'BUILDER',
 			name: '筑城工匠',
 			toolName: '木锤',
-			toolCost: 70,
+			toolCost: 7,
 			color: 0xffed8936,
 			maxHp: 110,
 			moveSpeed: 150,
@@ -533,7 +544,7 @@ export const GameConfig = {
 			role: 'MILITIA',
 			name: '永嘉场乡兵',
 			toolName: '长枪',
-			toolCost: 75,
+			toolCost: 8,
 			color: 0xff4299e1,
 			maxHp: 160,
 			moveSpeed: 165,
@@ -549,7 +560,7 @@ export const GameConfig = {
 			role: 'KUNG_FU',
 			name: '王家拳武师',
 			toolName: '红绸拳谱',
-			toolCost: 110,
+			toolCost: 11,
 			color: 0xffe53e3e,
 			maxHp: 240,
 			moveSpeed: 185,
@@ -573,7 +584,7 @@ export const GameConfig = {
 			attackDamage: 14,
 			attackRange: 50,
 			attackInterval: 1.1,
-			rewardSilver: 18,
+			rewardSilver: 2,
 			width: 28,
 			height: 52,
 			color: 0xff9f7aea,
@@ -586,7 +597,7 @@ export const GameConfig = {
 			attackDamage: 26,
 			attackRange: 60,
 			attackInterval: 1.25,
-			rewardSilver: 35,
+			rewardSilver: 4,
 			width: 34,
 			height: 62,
 			color: 0xffc53030,
@@ -599,7 +610,7 @@ export const GameConfig = {
 			attackDamage: 48,
 			attackRange: 75,
 			attackInterval: 1.5,
-			rewardSilver: 160,
+			rewardSilver: 16,
 			width: 48,
 			height: 82,
 			color: 0xff742a2a,
@@ -613,7 +624,7 @@ export const GameConfig = {
 			title: '第一夜 · 初试堡墙',
 			historicalNote: '嘉靖三十七年，王叔杲辍试归乡，倡议筑堡自卫，初成东垣。',
 			victorySpeech: '「堡墙初立，小股倭探已退。然贼势方炽，速整农桑盐课以备大敌！」',
-			rewardSilver: 90,
+			rewardSilver: 9,
 			groups: [
 				{ enemyType: 'SCOUT', count: 4, interval: 1.8, delay: 0.5 },
 				{ enemyType: 'SCOUT', count: 2, interval: 2.0, delay: 3.0 },
@@ -624,7 +635,7 @@ export const GameConfig = {
 			title: '第二夜 · 滩涂夜袭',
 			historicalNote: '贼众借潮汐登岸龙湾，直扑环海楼瓮城。',
 			victorySpeech: '「乡兵用命，东门无恙。盐课既入堡，军资渐丰！」',
-			rewardSilver: 110,
+			rewardSilver: 11,
 			groups: [
 				{ enemyType: 'SCOUT', count: 6, interval: 1.5, delay: 0.5 },
 				{ enemyType: 'SAMURAI', count: 2, interval: 2.5, delay: 5.0 },
@@ -635,7 +646,7 @@ export const GameConfig = {
 			title: '第三夜 · 十八号齐心',
 			historicalNote: '王氏宗族依“十八号分段包干”之制，轮番登城御敌。',
 			victorySpeech: '「十八号族人同心协力，倭奴虽众，难越雷池一步！」',
-			rewardSilver: 130,
+			rewardSilver: 13,
 			groups: [
 				{ enemyType: 'SCOUT', count: 7, interval: 1.4, delay: 0.5 },
 				{ enemyType: 'SAMURAI', count: 4, interval: 2.0, delay: 4.0 },
@@ -646,7 +657,7 @@ export const GameConfig = {
 			title: '第四夜 · 倭酋叩关',
 			historicalNote: '倭酋率精锐夜攻环海楼，炮石齐发，火光照彻永嘉场。',
 			victorySpeech: '「斩却倭酋前锋，环海楼巍然屹立！然大股贼寇尚在海上窥伺。」',
-			rewardSilver: 180,
+			rewardSilver: 18,
 			groups: [
 				{ enemyType: 'SCOUT', count: 6, interval: 1.3, delay: 0.5 },
 				{ enemyType: 'SAMURAI', count: 4, interval: 1.8, delay: 3.5 },
@@ -658,7 +669,7 @@ export const GameConfig = {
 			title: '第五夜 · 断粮之忧',
 			historicalNote: '贼围堡外，欲断我粮道，幸赖堡内水田自给不绝。',
 			victorySpeech: '「堡中有田有盐，久困不乱。贼计既穷，其势必急！」',
-			rewardSilver: 160,
+			rewardSilver: 16,
 			groups: [
 				{ enemyType: 'SCOUT', count: 9, interval: 1.2, delay: 0.5 },
 				{ enemyType: 'SAMURAI', count: 6, interval: 1.7, delay: 3.0 },
@@ -669,7 +680,7 @@ export const GameConfig = {
 			title: '第六夜 · 铁闸怒潮',
 			historicalNote: '东门激战正酣，内城水门铁闸与十二敌台互为犄角。',
 			victorySpeech: '「敌台箭雨如蝗，佛郎机炮震海，倭寇丧胆而逃！」',
-			rewardSilver: 190,
+			rewardSilver: 19,
 			groups: [
 				{ enemyType: 'SCOUT', count: 10, interval: 1.0, delay: 0.5 },
 				{ enemyType: 'SAMURAI', count: 8, interval: 1.5, delay: 2.5 },
@@ -680,7 +691,7 @@ export const GameConfig = {
 			title: '第七夜 · 血战金岙志',
 			historicalNote: '念及王沛梅头殉国、王德金岙捐躯之烈，全堡义师无不奋勇当先。',
 			victorySpeech: '「先烈忠魂佑我英桥！明夜乃最后一战，务求全胜！」',
-			rewardSilver: 220,
+			rewardSilver: 22,
 			groups: [
 				{ enemyType: 'SCOUT', count: 12, interval: 0.9, delay: 0.5 },
 				{ enemyType: 'SAMURAI', count: 10, interval: 1.4, delay: 2.0 },
@@ -691,7 +702,7 @@ export const GameConfig = {
 			title: '第八夜 · 八挫倭锋',
 			historicalNote: '永昌堡建成后八次击退倭寇大举进犯，保一方黎民平安，名垂青史。',
 			victorySpeech: '「八战八捷，倭患终靖！永昌堡铁血之名，从此永镇东南海疆！」',
-			rewardSilver: 300,
+			rewardSilver: 30,
 			groups: [
 				{ enemyType: 'SCOUT', count: 12, interval: 0.85, delay: 0.5 },
 				{ enemyType: 'SAMURAI', count: 10, interval: 1.3, delay: 2.0 },
