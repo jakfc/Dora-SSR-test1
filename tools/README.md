@@ -20,7 +20,11 @@
 | `upgrade_bg_pro.py` | 背景层的 AI 生成脚本（保存着每张背景的提示词与参数，比 `regen_bg_ai.py` 更激进的一套重出流程） | 想按提示词重出背景时 |
 | `redo_all_walks_from_video.py` | 从参考视频逐帧抽出行走动作，对齐底座后写成 6 帧 `*_walk_01..06.png`（1x + @2x） | 想重做/加帧行走动画时 |
 | `generate_audio_assets.py` | 合成全部 BGM / 音效（`.wav`，写到 `assets/audio/`），参数与清单都在脚本里 | 想重出/改音频时 |
+| `gen_level_models.py` | 按等级生成地标/建筑模型（`b01_shrine_lv2`、`b04_inner_water_gate_broken`、`b12_house_lv1~3` …），输出 1x + `@2x` | 加了新的等级态、或想重画逐级建模时 |
+| `modular_bg_builder.py` | 用模块拼背景层（天空 / 地平线 / 民居剪影等），方便改构图 | 想调背景构图时 |
 | `_probe_audio.py` | 音频运行时自检：逐个 `Content.exist` + 真的开播，报告缺失/播不出的文件 | 换音频之后 |
+| `_probe_fog.py` | 运行时核对**迷雾分区 / 开垦等级 / 双岸刷怪点 / 节奏**（要引擎已启动） | 改地图、迷雾、开垦、节奏之后 |
+| `_look.py` / `ascii_preview.py` | 抓一帧游戏画面 → ASCII + 16 段平均色，用来在没有看图工具时判断有没有画歪 | 改完背景/镜头后目测确认 |
 
 ## 常用自检流程（换素材之后）
 
@@ -30,7 +34,8 @@ python tools/audit_padding.py      # 2. 留白是否需要重新校准
 python tools/audit_scale.py        # 3. 显示比例（px/unit）是否统一
 python tools/audit_2x.py           # 4. 还缺哪些 @2x 主稿
 python tools/inspect_scene.py      # 5. 跑起来，倒出场景树核对
-python tools/_probe_audio.py       # 6. 音频自检：文件在不在、能不能开播
+python tools/_probe_fog.py         # 6. 迷雾 / 开垦 / 刷怪点 / 节奏自检（需引擎在跑）
+python tools/_probe_audio.py       # 7. 音频自检：文件在不在、能不能开播
 ```
 
 `inspect_scene.py` 需要引擎可执行文件路径，默认用安装版

@@ -30,8 +30,13 @@ jobs:
 
       - name: 检查是否误提交了构建产物
         run: |
-          if git ls-files '*.lua' | grep .; then
-            echo "::error::仓库里不应包含 .lua（TS 编译产物）：$(git ls-files '*.lua' | head -5 | tr '\n' ' ')"
-            exit 1
-          fi
-          echo "OK：没有提交 .lua"
+          bad=0
+          for f in $(git ls-files '*.lua'); do
+            # 同名 .ts 存在 → 这个 .lua 就是引擎的编译产物，不该入库
+            if git ls-files --error-unmatch "${f%.lua}.ts" >/dev/null 2>&1; then
+              echo "::error::$f 是 ${f%.lua}.ts 的编译产物，不应入库"
+              bad=1
+            fi
+          done
+          if [ "$bad" -ne 0 ]; then exit 1; fi
+          echo "OK：没有提交 TS 编译产物（tools/ 下手写的自检探针不在此列）"

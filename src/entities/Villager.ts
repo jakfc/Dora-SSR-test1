@@ -314,15 +314,25 @@ export class Villager {
 			return;
 		}
 
-		const workX = GameConfig.MAP_LANDMARKS.PADDY_FIELD.x + ((this.id % 5) - 2) * 22;
+		// 东西各一片水田，按 id 分派；只有开垦过的田才出粮，荒地先回宗祠等待
+		const paddyId = this.id % 2 === 0 ? 'WEST_PADDY' : 'EAST_PADDY';
+		const paddy = GameConfig.MAP_LANDMARKS[paddyId];
+		if (!GameState.instance.isLandReady(paddyId)) {
+			const idleX = GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x + ((this.id % 5) - 2) * 20;
+			this.moveToward(idleX, dt);
+			return;
+		}
+		const bonus = GameState.instance.landLevelOf(paddyId) * GameConfig.RECLAIM.PADDY_YIELD_PER_LEVEL;
+
+		const workX = paddy.x + ((this.id % 5) - 2) * 22;
 		if (this.moveToward(workX, dt)) {
 			const cfg = GameConfig.ROLES.FARMER;
 			this.produceTimer += dt;
 			if (this.produceTimer >= cfg.produceInterval) {
 				this.produceTimer -= cfg.produceInterval;
-				GameState.instance.addFood(cfg.produceAmount);
+				GameState.instance.addFood(cfg.produceAmount + bonus);
 				soundSfx('farm_hoe');
-				ctx.onProduceResource('FOOD', cfg.produceAmount, this.x);
+				ctx.onProduceResource('FOOD', cfg.produceAmount + bonus, this.x);
 			}
 		}
 	}
@@ -335,12 +345,24 @@ export class Villager {
 		const cfg = GameConfig.ROLES.SALT_WORKER;
 		const hallX = GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x + ((this.id % 5) - 2) * 20;
 		const officeX = GameConfig.MAP_LANDMARKS.SALT_OFFICE.x + ((this.id % 5) - 2) * 24;
-		const yardX = GameConfig.MAP_LANDMARKS.OUTER_SALT_FLAT.x + ((this.id % 7) - 3) * 90;
+		// 按 id 分派东西两片盐田；未开垦的盐田出不了盐
+		const yardId = this.id % 2 === 0 ? 'WEST_SALT_FLAT' : 'EAST_SALT_FLAT';
+		const yardBaseX = GameConfig.MAP_LANDMARKS[yardId].x;
+		const yardX = yardBaseX + ((this.id % 7) - 3) * 90;
 		const isNight = ctx.phase === 'NIGHT';
+		const yardReady = GameState.instance.isLandReady(yardId);
+
+		// 自己那半边盐田还没开垦：白天空守宗祠，入夜照旧回城避难
+		if (!yardReady && !isNight) {
+			this.moveToward(hallX, dt);
+			return;
+		}
 
 		// 入库结算
 		const deposit = () => {
-			const gain = GameConfig.SALT_FETCH.tripSilver;
+			const level = GameState.instance.landLevelOf(yardId);
+			const gain =
+				GameConfig.SALT_FETCH.tripSilver + level * GameConfig.RECLAIM.SALT_YIELD_PER_LEVEL;
 			GameState.instance.addSilver(gain);
 			ctx.onProduceResource('SILVER', gain, this.x);
 			this.carrying = false;
@@ -530,11 +552,12 @@ export class Villager {
 			return;
 		}
 
-		// 无近敌时：白天巡逻校场，夜晚驻守当前最前线
+		// 无近敌时：白天巡逻校场，夜晚按单双号分守东西两线
 		const targetX =
 			ctx.phase === 'DAY'
 				? GameConfig.MAP_LANDMARKS.MAIN_WALL.x + ((this.id % 5) - 2) * 26
-				: gs.getFrontDefenseX() + ((this.id % 5) - 2) * 16;
+				: (this.id % 2 === 0 ? gs.getWestDefenseX() : gs.getFrontDefenseX()) +
+					((this.id % 5) - 2) * 16;
 		this.moveToward(targetX, dt);
 	}
 }

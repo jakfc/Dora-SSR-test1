@@ -22,6 +22,7 @@ interface ScavengeDrop {
 interface PendingSpawn {
 	enemyType: EnemyType;
 	triggerTime: number;
+	side: 'W' | 'E';
 }
 
 /** 工地可视化：进度条 + 抡锤动画 */
@@ -104,26 +105,44 @@ export function GameScene(): Node.Type {
 	scene.addChild(midLayer);
 	scene.addChild(worldLayer);
 
-	// 远景：大罗山与海天轮廓
+	// 战争迷雾（建在 worldLayer 内部、地标之后、角色之前：雾盖地不盖人）
+	// 详见下方「战争迷雾」段：只有主角王叔杲能探路，族丁在雾里依然可见。
+
+	// 新地图分区（一切布局都从配置推导，改坐标只需改 GameConfig）
+	const LM = GameConfig.MAP_LANDMARKS;
+	const westSeaEnd = LM.WEST_COAST.x; // 西岸：以西是海
+	const eastSeaStart = LM.EAST_COAST.x; // 东岸：以东是海
+	const cityMinX = LM.INNER_GATE.x + 60; // 堡内石板路（西起）
+	const cityMaxX = LM.EAST_GATE.x - 60; // 堡内石板路（东止）
+
+	// 远景：海天一线（西面的大罗山已撤，改为开阔海面与东西两头的倭船帆影）
 	const farDraw = DrawNode();
-	drawRect(farDraw, 0, GameConfig.GROUND_Y, 2400, 120, 0x332d3748);
-	farDraw.drawPolygon(
-		[
-			Vec2(0, GameConfig.GROUND_Y),
-			Vec2(180, 480),
-			Vec2(420, 290),
-			Vec2(700, 420),
-			Vec2(1050, 240),
-			Vec2(1050, GameConfig.GROUND_Y),
-		],
-		Color(0xff2c3e50)
-	);
+	drawRect(farDraw, 0, GameConfig.GROUND_Y, GameConfig.MAP_WIDTH, 120, 0x332d3748);
+	for (const jx of [430, 1060, 6800, 7280]) {
+		farDraw.drawPolygon(
+			[
+				Vec2(jx - 26, GameConfig.GROUND_Y + 150),
+				Vec2(jx + 26, GameConfig.GROUND_Y + 150),
+				Vec2(jx + 14, GameConfig.GROUND_Y + 176),
+				Vec2(jx - 14, GameConfig.GROUND_Y + 176),
+			],
+			Color(0x992c3e50)
+		);
+		farDraw.drawPolygon(
+			[
+				Vec2(jx, GameConfig.GROUND_Y + 150),
+				Vec2(jx, GameConfig.GROUND_Y + 212),
+				Vec2(jx + 22, GameConfig.GROUND_Y + 150),
+			],
+			Color(0x992c3e50)
+		);
+	}
 	farLayer.addChild(farDraw);
 
-	// 远景剪影贴图：横向平铺，隔块镜像以缓解重复感
+	// 远景剪影贴图：横向平铺盖满整张大地图，隔块镜像以缓解重复感
 	if (artAt(farLayer, 'horizon', 0, GameConfig.GROUND_Y) !== undefined) {
 		farDraw.clear();
-		for (let i = 1; i < 5; i++) {
+		for (let i = 1; i * 1280 < GameConfig.MAP_WIDTH + 1280; i++) {
 			const flip = i % 2 === 1;
 			const tile = artAt(farLayer, 'horizon', i * 1280 + (flip ? 1280 : 0), GameConfig.GROUND_Y);
 			if (tile !== undefined && flip) tile.scaleX = -1;
@@ -132,7 +151,7 @@ export function GameScene(): Node.Type {
 
 	// 中景：堡内河浃、屋舍远影
 	const midDraw = DrawNode();
-	for (let x = 220; x < 2400; x += 240) {
+	for (let x = cityMinX; x < cityMaxX; x += 240) {
 		drawRect(midDraw, x, GameConfig.GROUND_Y, 110, 75, 0x883b4a59);
 		drawRect(midDraw, x - 8, GameConfig.GROUND_Y + 75, 126, 22, 0x882d3748);
 	}
@@ -149,38 +168,91 @@ export function GameScene(): Node.Type {
 	// 主战场地面与地标建筑
 	const groundDraw = DrawNode();
 	drawRect(groundDraw, 0, 0, GameConfig.MAP_WIDTH, GameConfig.GROUND_Y, 0xff3b3026);
-	// 堡内石板路 (0 ~ 2560) 与城外滩涂 / 盐田 (2560 ~ 海)
-	const cityGroundW = 2560;
-	const seaStart = GameConfig.MAP_LANDMARKS.COAST_SPAWN.x - 260;
-	drawRect(groundDraw, 0, GameConfig.GROUND_Y - 14, cityGroundW, 14, 0xff718096);
-	drawRect(groundDraw, cityGroundW, GameConfig.GROUND_Y - 14, seaStart - cityGroundW, 14, 0xffb79f78);
-	drawRect(groundDraw, seaStart, 0, GameConfig.MAP_WIDTH - seaStart, GameConfig.GROUND_Y, 0xff1e4e79);
+	// 两头入海、中间堡城：西岸以西是海，西岸~内城水门是滩涂，
+	// 内城水门~东门之间是堡内石板路，东门~东岸又是滩涂，东岸以东复为海。
+	drawRect(groundDraw, 0, 0, westSeaEnd, GameConfig.GROUND_Y, 0xff1e4e79);
+	drawRect(groundDraw, eastSeaStart, 0, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.GROUND_Y, 0xff1e4e79);
+	drawRect(groundDraw, westSeaEnd, GameConfig.GROUND_Y - 14, cityMinX - westSeaEnd, 14, 0xffb79f78);
+	drawRect(groundDraw, cityMaxX, GameConfig.GROUND_Y - 14, eastSeaStart - cityMaxX, 14, 0xffb79f78);
+	drawRect(groundDraw, cityMinX, GameConfig.GROUND_Y - 14, cityMaxX - cityMinX, 14, 0xff718096);
 	worldLayer.addChild(groundDraw);
 
 	// 地面 / 滩涂贴图：横向平铺（有素材时盖住程序化地面）
 	const groundArtNode = Node();
 	worldLayer.addChild(groundArtNode);
-	if (artAt(groundArtNode, 'ground_city', 0, 0) !== undefined) {
-		for (let i = 1; i * 640 < cityGroundW; i++) artAt(groundArtNode, 'ground_city', i * 640, 0);
-		for (let x = cityGroundW; x < GameConfig.MAP_WIDTH; x += 640) {
-			artAt(groundArtNode, 'ground_beach', x, 0);
+	if (artAt(groundArtNode, 'ground_beach', westSeaEnd, 0) !== undefined) {
+		for (let x = westSeaEnd; x < cityMinX; x += 640) artAt(groundArtNode, 'ground_beach', x, 0);
+		for (let x = cityMaxX; x < GameConfig.MAP_WIDTH; x += 640) artAt(groundArtNode, 'ground_beach', x, 0);
+		if (artAt(groundArtNode, 'ground_city', cityMinX, 0) !== undefined) {
+			for (let x = cityMinX; x < cityMaxX; x += 640) artAt(groundArtNode, 'ground_city', x, 0);
 		}
 		groundDraw.clear();
-		// 最右侧海面
+		// 两头海面重新盖回（铺贴图时不能让滩涂越界到海里）
 		const seaDraw = DrawNode();
-		drawRect(seaDraw, seaStart, 0, GameConfig.MAP_WIDTH - seaStart, GameConfig.GROUND_Y, 0xff1e4e79);
+		drawRect(seaDraw, 0, 0, westSeaEnd, GameConfig.GROUND_Y, 0xff1e4e79);
+		drawRect(seaDraw, eastSeaStart, 0, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.GROUND_Y, 0xff1e4e79);
 		worldLayer.addChild(seaDraw);
 	}
 
-	// 绘制静态地标（宗祠、水田、盐课司、主城墙、海滨）
+	// 绘制静态地标（宗祠、水田、盐课司、主城墙、东西滩头）
+	// 每级一块模型：升级后换的是「另一座楼」，不是同一个方块改数字。
 	const landmarkDraw = DrawNode();
 	worldLayer.addChild(landmarkDraw);
 	const landmarkIds = Object.keys(GameConfig.MAP_LANDMARKS) as LandmarkId[];
+
+	/** 地标 → 当前等级/状态对应的模型 id */
+	const landmarkArtId = (id: LandmarkId): string => {
+		if (id === 'ANCESTRAL_HALL') {
+			const lv = gs.ancestralHallLevel;
+			return lv <= 1 ? 'lm_ANCESTRAL_HALL' : `lm_ANCESTRAL_HALL_lv${lv}`;
+		}
+		if (id === 'INNER_GATE') {
+			if (gs.innerGateHp <= 0) return 'lm_INNER_GATE_broken';
+			const lv = gs.innerGateLevel;
+			return lv <= 1 ? 'lm_INNER_GATE' : `lm_INNER_GATE_lv${lv}`;
+		}
+		if (id === 'EAST_GATE') {
+			if (gs.eastGateHp <= 0) return 'lm_EAST_GATE_broken';
+			if (gs.eastGateOpen) return 'lm_EAST_GATE_open';
+			const lv = gs.eastGateLevel;
+			return lv <= 1 ? 'lm_EAST_GATE' : `lm_EAST_GATE_lv${lv}`;
+		}
+		if (id === 'WEST_COAST' || id === 'EAST_COAST') return 'lm_coast';
+		const lmCfg = GameConfig.MAP_LANDMARKS[id];
+		if (lmCfg.reclaimable === 'PADDY') return `lm_paddy_lv${gs.landLevelOf(id)}`;
+		if (lmCfg.reclaimable === 'SALT') return `lm_saltflat_lv${gs.landLevelOf(id)}`;
+		return `lm_${id}`;
+	};
+
+	const landmarkArtNodes: Partial<Record<LandmarkId, Node.Type>> = {};
+	const landmarkArtRow: LandmarkId[] = [];
 	for (const id of landmarkIds) {
 		const lm = GameConfig.MAP_LANDMARKS[id];
+		// 东门 / 内城水门 / 宗祠另用动态挂点（换门、换顶、破损态）
 		if (id !== 'EAST_GATE' && id !== 'INNER_GATE' && id !== 'ANCESTRAL_HALL') {
-			// 有美术素材就摆精灵，否则退回方块
-			if (artAt(worldLayer, `lm_${id}`, lm.x, GameConfig.GROUND_Y) === undefined) {
+			const holder = Node();
+			holder.x = lm.x;
+			holder.y = GameConfig.GROUND_Y;
+			worldLayer.addChild(holder);
+			landmarkArtNodes[id] = holder;
+			landmarkArtRow.push(id);
+		}
+		const lbl = Label('sarasa-mono-sc-regular', 15) as Label.Type;
+		lbl.text = `${lm.name}\n(${lm.subtitle})`;
+		lbl.x = lm.x;
+		lbl.y = GameConfig.GROUND_Y + lm.height + 26;
+		lbl.color = Color(0xfffefcbf);
+		worldLayer.addChild(lbl);
+	}
+
+	/** 按当前等级/状态重刷静态地标模型（缺图时回退色块） */
+	const refreshLandmarkArt = () => {
+		landmarkDraw.clear();
+		for (const id of landmarkArtRow) {
+			const holder = landmarkArtNodes[id];
+			if (holder === undefined) continue;
+			const lm = GameConfig.MAP_LANDMARKS[id];
+			if (artInto(holder, landmarkArtId(id)) === undefined) {
 				drawRect(
 					landmarkDraw,
 					lm.x - lm.width / 2,
@@ -192,13 +264,8 @@ export function GameScene(): Node.Type {
 				);
 			}
 		}
-		const lbl = Label('sarasa-mono-sc-regular', 15) as Label.Type;
-		lbl.text = `${lm.name}\n(${lm.subtitle})`;
-		lbl.x = lm.x;
-		lbl.y = GameConfig.GROUND_Y + lm.height + 26;
-		lbl.color = Color(0xfffefcbf);
-		worldLayer.addChild(lbl);
-	}
+	};
+	refreshLandmarkArt();
 
 	// ---- 民居：人口之源（等级决定住得下多少人）----
 	// 与地标同层，但必须在村民之前创建，否则屋子会盖在人头上。
@@ -302,6 +369,55 @@ export function GameScene(): Node.Type {
 	const floatingTexts: FloatingText[] = [];
 	let nextToolId = 1;
 
+	// ---------- 战争迷雾 ----------
+	// 层级：在地标之后、塔与人之前 —— 雾遮住未探明的地，但族丁不会被雾吞掉。
+	// 只有主角王叔杲走过去才算「探明」（参考《王国：新大陆》：君主一人开路）。
+	const fogLayer = Node();
+	fogLayer.anchor = Vec2(0, 0);
+	worldLayer.addChild(fogLayer);
+	const fogDraw = DrawNode();
+	fogLayer.addChild(fogDraw);
+	const fogLabels: Record<string, Label.Type> = {};
+	for (const z of GameConfig.FOG_ZONES) {
+		const lbl = Label('sarasa-mono-sc-regular', 22) as Label.Type;
+		lbl.text = `${z.name}\n未 探 明`;
+		lbl.x = z.x + z.width / 2;
+		lbl.y = GameConfig.GROUND_Y + 150;
+		lbl.color = Color(0xff718096);
+		fogLayer.addChild(lbl);
+		fogLabels[z.id] = lbl;
+	}
+	const FOG_TOP = GameConfig.GROUND_Y + 420;
+	const refreshFogVisuals = () => {
+		fogDraw.clear();
+		for (const z of GameConfig.FOG_ZONES) {
+			const explored = gs.isExplored(z.id);
+			const lbl = fogLabels[z.id];
+			if (lbl !== undefined) lbl.visible = !explored;
+			if (explored) continue;
+			drawRect(fogDraw, z.x, 0, z.width, FOG_TOP, 0xdd0b1220);
+		}
+	};
+	refreshFogVisuals();
+
+	/** 主角行至未探明地界边线即揭开迷雾（其余族丁走进去不算，雾里也看得见他们） */
+	const revealFogAround = (xs: number[]) => {
+		let changed = false;
+		const reach = GameConfig.FOG_REVEAL_RADIUS;
+		for (const z of GameConfig.FOG_ZONES) {
+			if (gs.isExplored(z.id)) continue;
+			for (const x of xs) {
+				if (x >= z.x - reach && x <= z.x + z.width + reach) {
+					gs.revealZone(z.id);
+					hud.showToast(`探明新地界：${z.name}`, 2.2);
+					changed = true;
+					break;
+				}
+			}
+		}
+		if (changed) refreshFogVisuals();
+	};
+
 	for (const ts of gs.towers) {
 		const tower = new DefenseTower(ts);
 		towers.push(tower);
@@ -338,9 +454,10 @@ export function GameScene(): Node.Type {
 		worldLayer.addChild(v.node);
 		playFx(worldLayer, 'fx_recruit', x, GameConfig.GROUND_Y + 60, 0.5, 0.3, 16);
 	};
-	spawnVillager(360, 'IDLE');
-	spawnVillager(410, 'IDLE');
-	spawnVillager(455, 'IDLE');
+	// 开局三名闲散族丁就在宗祠前（新地图的城心是宗祠@2620，不再从西海那头起步）
+	spawnVillager(GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x - 120, 'IDLE');
+	spawnVillager(GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x - 60, 'IDLE');
+	spawnVillager(GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x - 20, 'IDLE');
 
 	const addFloatingText = (text: string, x: number, y: number, color = 0xfff6e05e) => {
 		const lbl = Label('sarasa-mono-sc-regular', 15) as Label.Type;
@@ -466,7 +583,17 @@ export function GameScene(): Node.Type {
 		if (gs.phase === 'NIGHT') {
 			drawRect(nightMaskDraw, 0, 0, Screen.width, Screen.height, 0x440b1426);
 			// 城墙火把与敌台灯笼（含盐田新敌台）
-			const torchXs = [460, 860, 1260, 1660, 2060, 2420, 3300];
+			const torchXs = [
+				GameConfig.MAP_LANDMARKS.WEST_SALT_FLAT.x,
+				GameConfig.MAP_LANDMARKS.WEST_PADDY.x,
+				GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x,
+				GameConfig.MAP_LANDMARKS.SALT_OFFICE.x,
+				GameConfig.MAP_LANDMARKS.INNER_GATE.x,
+				GameConfig.MAP_LANDMARKS.MAIN_WALL.x,
+				GameConfig.MAP_LANDMARKS.EAST_GATE.x,
+				GameConfig.MAP_LANDMARKS.EAST_PADDY.x,
+				GameConfig.MAP_LANDMARKS.EAST_SALT_FLAT.x,
+			];
 			for (const tx of torchXs) {
 				if (artAt(torchArtNode, 'fx_torch_glow', tx, GameConfig.GROUND_Y + 95) === undefined) {
 					torchDraw.drawDot(Vec2(tx, GameConfig.GROUND_Y + 95), 14, Color(0x88f6ad55));
@@ -479,7 +606,7 @@ export function GameScene(): Node.Type {
 		const hallLm = GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL;
 		shrineArtNode.x = hallLm.x;
 		shrineArtNode.y = GameConfig.GROUND_Y;
-		const hallArtId = gs.ancestralHallLevel >= 2 ? 'lm_ANCESTRAL_HALL_lv2' : 'lm_ANCESTRAL_HALL';
+		const hallArtId = landmarkArtId('ANCESTRAL_HALL');
 		if (artInto(shrineArtNode, hallArtId) === undefined) {
 			drawRect(
 				gatesDraw,
@@ -497,7 +624,7 @@ export function GameScene(): Node.Type {
 		innerGateArtNode.x = innerLm.x;
 		innerGateArtNode.y = GameConfig.GROUND_Y;
 		if (gs.innerGateHp > 0) {
-			if (artInto(innerGateArtNode, 'lm_INNER_GATE') === undefined) {
+			if (artInto(innerGateArtNode, landmarkArtId('INNER_GATE')) === undefined) {
 				drawRect(
 					gatesDraw,
 					innerLm.x - innerLm.width / 2,
@@ -553,7 +680,7 @@ export function GameScene(): Node.Type {
 			// 关闭状态：全封闭瓮城铁门
 			gateArtNode.x = eastLm.x;
 			gateArtNode.y = GameConfig.GROUND_Y;
-			if (artInto(gateArtNode, 'lm_EAST_GATE') === undefined) {
+			if (artInto(gateArtNode, landmarkArtId('EAST_GATE')) === undefined) {
 				drawRect(
 					gatesDraw,
 					eastLm.x - eastLm.width / 2,
@@ -708,6 +835,41 @@ export function GameScene(): Node.Type {
 			return;
 		}
 
+		if (p.kind === 'INNER_GATE_UPGRADE') {
+			gs.innerGateLevel++;
+			gs.innerGateMaxHp += 320;
+			gs.innerGateHp = gs.innerGateMaxHp;
+			refreshEnvironmentVisuals();
+			playFx(
+				worldLayer,
+				'fx_levelup',
+				GameConfig.MAP_LANDMARKS.INNER_GATE.x,
+				GameConfig.GROUND_Y + 120,
+				0.7,
+				0.35,
+				26
+			);
+			hud.showToast(`内城水门加固竣工，升至 Lv.${gs.innerGateLevel}！`, 2.4);
+			return;
+		}
+
+		if (p.kind === 'LAND_RECLAIM') {
+			const id = p.towerId as LandmarkId;
+			const lm = GameConfig.MAP_LANDMARKS[id];
+			const level = gs.landLevelOf(id) + 1;
+			gs.landLevels[id] = level;
+			refreshLandmarkArt();
+			refreshEnvironmentVisuals();
+			playFx(worldLayer, 'fx_levelup', lm.x, GameConfig.GROUND_Y + 60, 0.6, 0.3, 22);
+			const kind = lm.reclaimable;
+			const extra =
+				kind === 'PADDY'
+					? `每季多收 ${GameConfig.RECLAIM.PADDY_YIELD_PER_LEVEL} 石粮`
+					: `每趟多出 ${GameConfig.RECLAIM.SALT_YIELD_PER_LEVEL} 两盐银`;
+			hud.showToast(`${lm.name}开垦至 Lv.${level}，${extra}。`, 2.8);
+			return;
+		}
+
 		let tower: DefenseTower | undefined = undefined;
 		for (const t of towers) {
 			if (t.state.id === p.towerId) tower = t;
@@ -759,6 +921,11 @@ export function GameScene(): Node.Type {
 		soundBgm('night');
 		soundSfx('wave_horn');
 		soundSfx('gate_open');
+		if (gs.eastGateOpen && gs.eastGateHp > 0) {
+			gs.eastGateOpen = false;
+			refreshEnvironmentVisuals();
+			hud.showToast('暮鼓一响，东门落锁。若还要出城拾荒，到东门按 [E] 再开门。', 2.6);
+		}
 		nightElapsed = 0;
 		foodConsumeTimer = 0;
 
@@ -771,11 +938,25 @@ export function GameScene(): Node.Type {
 		// 装载本夜倭寇波次
 		const wave = GameConfig.NIGHT_WAVES[gs.day - 1];
 		spawnQueue = [];
-		for (const g of wave.groups) {
+		// 两面上岸的距离不一样（西岸离堡更近），把西面的登岸往后推一点，
+		// 免得西面贼兵抢到城下时东面还在赶路、守城节奏完全对不上。
+		const hallX = GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x;
+		const eastTravel = GameConfig.SPAWN_EAST_X - hallX;
+		const westTravel = hallX - GameConfig.SPAWN_WEST_X;
+		for (let gi = 0; gi < wave.groups.length; gi++) {
+			const g = wave.groups[gi];
+			// 未显式指定登岸面时，按组序东西交替：倭寇两面夹击
+			const side: 'W' | 'E' = g.side !== undefined ? g.side : gi % 2 === 0 ? 'W' : 'E';
+			const stat = GameConfig.ENEMIES[g.enemyType];
+			const gapSeconds =
+				((eastTravel - westTravel) / Math.max(1, stat.moveSpeed)) *
+				GameConfig.WEST_LANDING_DELAY_RATIO;
+			const sideDelay = side === 'W' ? Math.max(0, gapSeconds) : 0;
 			for (let i = 0; i < g.count; i++) {
 				spawnQueue.push({
 					enemyType: g.enemyType,
-					triggerTime: g.delay + i * g.interval,
+					triggerTime: g.delay + sideDelay + i * g.interval,
+					side,
 				});
 			}
 		}
@@ -914,6 +1095,28 @@ export function GameScene(): Node.Type {
 		}
 	};
 
+	/** 开垦荒地：水田 / 盐田从 0 级「荒地」逐级开荒，工期遂级增长 */
+	const startReclaim = (id: LandmarkId, x: number) => {
+		const lm = GameConfig.MAP_LANDMARKS[id];
+		const kind = lm.reclaimable;
+		if (kind !== 'PADDY' && kind !== 'SALT') return;
+		const level = gs.landLevelOf(id);
+		if (level >= GameConfig.RECLAIM.MAX_LEVEL) {
+			hud.showToast(`${lm.name}已是上等熟田（Lv.${level}），再无可垦之地。`, 2.2);
+			return;
+		}
+		if (gs.hasProject('LAND_RECLAIM', id)) {
+			hud.showToast('这片荒地正在开垦中。', 2.0);
+			return;
+		}
+		const cost = GameConfig.RECLAIM.COST[kind] * (level + 1);
+		const seconds = GameConfig.RECLAIM.SECONDS[kind] * (1 + 0.25 * level);
+		const label = `${lm.name} 开垦 Lv.${level + 1}`;
+		throwSilver(`RECLAIM:${id}`, x, cost, label, () =>
+			beginProject('LAND_RECLAIM', label, x, seconds, level + 1, id)
+		);
+	};
+
 	const handleInteract = (optionIndex = 0) => {
 		if (waitingVictoryModal) return;
 
@@ -947,7 +1150,7 @@ export function GameScene(): Node.Type {
 
 		const landmark = player.findNearestLandmark();
 		if (!landmark) {
-			hud.showToast('请靠近宗祠、民居、水田、盐课司、内城水门、主城墙或东门后再交互', 2.0);
+			hud.showToast('请靠近宗祠、民居、水田、盐田、盐课司、内城水门、主城墙、东门或滩头后再交互', 2.0);
 			return;
 		}
 
@@ -1001,19 +1204,50 @@ export function GameScene(): Node.Type {
 					);
 				}
 			);
-		} else if (landmark === 'PADDY_FIELD') {
+		} else if (landmark === 'WEST_PADDY' || landmark === 'EAST_PADDY') {
+			const lmX = GameConfig.MAP_LANDMARKS[landmark].x;
+			if (optionIndex === 1) {
+				startReclaim(landmark, lmX);
+				return;
+			}
 			const cost = GameConfig.ROLES.FARMER.toolCost;
-			throwSilver('TOOL:FARMER', GameConfig.MAP_LANDMARKS.PADDY_FIELD.x, cost, '置办锄头', () => {
-				spawnTool(GameConfig.MAP_LANDMARKS.PADDY_FIELD.x, 'FARMER');
-				addFloatingText('置办【锄头】', GameConfig.MAP_LANDMARKS.PADDY_FIELD.x, GameConfig.GROUND_Y + 80);
+			throwSilver('TOOL:FARMER', lmX, cost, '置办锄头', () => {
+				spawnTool(lmX, 'FARMER');
+				addFloatingText('置办【锄头】', lmX, GameConfig.GROUND_Y + 80);
 			});
 		} else if (landmark === 'SALT_OFFICE') {
+			const officeX = GameConfig.MAP_LANDMARKS.SALT_OFFICE.x;
 			const cost = GameConfig.ROLES.SALT_WORKER.toolCost;
-			throwSilver('TOOL:SALT_WORKER', GameConfig.MAP_LANDMARKS.SALT_OFFICE.x, cost, '置办盐铲', () => {
-				spawnTool(GameConfig.MAP_LANDMARKS.SALT_OFFICE.x, 'SALT_WORKER');
-				addFloatingText('置办【盐铲】', GameConfig.MAP_LANDMARKS.SALT_OFFICE.x, GameConfig.GROUND_Y + 80);
+			throwSilver('TOOL:SALT_WORKER', officeX, cost, '置办盐铲', () => {
+				spawnTool(officeX, 'SALT_WORKER');
+				addFloatingText('置办【盐铲】', officeX, GameConfig.GROUND_Y + 80);
 			});
 		} else if (landmark === 'INNER_GATE') {
+			if (optionIndex === 2) {
+				if (gs.innerGateLevel >= GameConfig.INNER_GATE_MAX_LEVEL) {
+					hud.showToast('内城水门已达最高坚固等级！', 2.0);
+					return;
+				}
+				if (gs.hasProject('INNER_GATE_UPGRADE')) {
+					hud.showToast('内城水门正在加固中。', 2.0);
+					return;
+				}
+				throwSilver(
+					'GATE:INNER',
+					GameConfig.MAP_LANDMARKS.INNER_GATE.x,
+					GameConfig.INNER_GATE_UPGRADE_COST,
+					'内城水门加固',
+					() =>
+						beginProject(
+							'INNER_GATE_UPGRADE',
+							`内城水门 Lv.${gs.innerGateLevel + 1}`,
+							GameConfig.MAP_LANDMARKS.INNER_GATE.x,
+							GameConfig.CONSTRUCTION_SECONDS.INNER_GATE_UPGRADE,
+							gs.innerGateLevel + 1
+						)
+				);
+				return;
+			}
 			if (optionIndex === 1) {
 				const innerTower = towers.find((t) => t.state.id === 'INNER_TOWER');
 				if (!innerTower) return;
@@ -1101,23 +1335,29 @@ export function GameScene(): Node.Type {
 			gs.eastGateOpen = !gs.eastGateOpen;
 			hud.showToast(gs.eastGateOpen ? '东门已开启，族丁可出城拾荒。' : '东门已关闭，瓮城严阵以待！', 2.0);
 			refreshEnvironmentVisuals();
-		} else if (landmark === 'OUTER_SALT_FLAT') {
+		} else if (landmark === 'WEST_SALT_FLAT' || landmark === 'EAST_SALT_FLAT') {
+			const lmX = GameConfig.MAP_LANDMARKS[landmark].x;
 			if (optionIndex === 1) {
-				const saltTower = towers.find((t) => t.state.id === 'SALT_TOWER');
-				if (!saltTower) return;
-				if (gs.hasProject('TOWER_UNLOCK', 'SALT_TOWER')) {
+				startReclaim(landmark, lmX);
+				return;
+			}
+			const saltTower = towers.find((t) =>
+				landmark === 'WEST_SALT_FLAT' ? t.state.id === 'WEST_SALT_TOWER' : t.state.id === 'EAST_SALT_TOWER'
+			);
+			if (saltTower !== undefined && !saltTower.state.unlocked) {
+				if (gs.hasProject('TOWER_UNLOCK', saltTower.state.id)) {
 					hud.showToast('盐田敌台正在施工中。', 2.0);
 					return;
 				}
 				const cost = 220;
-				throwSilver('TOWER:SALT_TOWER', saltTower.state.x, cost, '盐田敌台营建', () =>
+				throwSilver(`TOWER:${saltTower.state.id}`, saltTower.state.x, cost, '盐田敌台营建', () =>
 					beginProject(
 						'TOWER_UNLOCK',
 						'盐田敌台',
 						saltTower.state.x,
 						GameConfig.CONSTRUCTION_SECONDS.TOWER_UNLOCK,
 						1,
-						'SALT_TOWER'
+						saltTower.state.id
 					)
 				);
 				return;
@@ -1127,11 +1367,11 @@ export function GameScene(): Node.Type {
 				if (!v.dead && v.role === 'SALT_WORKER') saltCount++;
 			}
 			hud.showToast(
-				`灶户 ${saltCount} 名往来盐田背盐（每趟 ${GameConfig.SALT_FETCH.tripSilver} 银），天黑前务必召回！`,
+				`灶户 ${saltCount} 名往来盐田背盐（每趟 ${GameConfig.SALT_FETCH.tripSilver} 银，田越熟出盐越多），天黑前务必召回！`,
 				3.0
 			);
-		} else if (landmark === 'COAST_SPAWN') {
-			hud.showToast('东海前哨：倭寇由此登岸，天亮后便会涌入城外。', 2.6);
+		} else if (landmark === 'EAST_COAST' || landmark === 'WEST_COAST') {
+			hud.showToast('滩头：倭寇由此东西两面登岸，天亮后便会涌入城外。', 2.6);
 		}
 	};
 
@@ -1222,6 +1462,9 @@ export function GameScene(): Node.Type {
 
 		const nearestLandmark = player.update(clampedDt, moveInput);
 
+		// 探路：只有主角王叔杲亲自走到未探明地界才算「探明」（族丁不算，但他们仍能从雾里被看见）
+		revealFogAround([player.x]);
+
 		// 2. 摄像机平滑跟随 + 三层视差滚动（按可视区域宽度动态限幅）
 		const halfView = Screen.width / 2;
 		const targetCamX = Math.max(
@@ -1250,7 +1493,11 @@ export function GameScene(): Node.Type {
 			const remainingQueue: PendingSpawn[] = [];
 			for (const item of spawnQueue) {
 				if (nightElapsed >= item.triggerTime) {
-					const enemy = new Enemy(item.enemyType, GameConfig.SPAWN_X);
+					const enemy = new Enemy(
+						item.enemyType,
+						item.side === 'E' ? GameConfig.SPAWN_EAST_X : GameConfig.SPAWN_WEST_X,
+						item.side
+					);
 					enemies.push(enemy);
 					worldLayer.addChild(enemy.node);
 				} else {

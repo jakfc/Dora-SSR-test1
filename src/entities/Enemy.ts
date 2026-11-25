@@ -27,6 +27,10 @@ function drawRect(
  */
 export class Enemy {
 	public readonly type: EnemyType;
+	/** 登岸方向：'E' 从东海（右）上岸向左推进，'W' 从西湾（左）上岸向右推进 */
+	public readonly side: 'W' | 'E';
+	/** 推进方向（-1 向左，+1 向右），登岸点到宗祠的方向 */
+	public readonly dir: number;
 	public readonly node: Node.Type;
 	private readonly bodyDraw: DrawNode.Type;
 	private readonly nameLabel: Label.Type;
@@ -49,8 +53,10 @@ export class Enemy {
 	private animClock = 0;
 	private animPrevX: number;
 
-	constructor(type: EnemyType, spawnX = GameConfig.SPAWN_X) {
+	constructor(type: EnemyType, spawnX = GameConfig.SPAWN_EAST_X, side: 'W' | 'E' = 'E') {
 		this.type = type;
+		this.side = side;
+		this.dir = side === 'E' ? -1 : 1;
 		this.x = spawnX;
 		this.animPrevX = spawnX;
 		const cfg = GameConfig.ENEMIES[type];
@@ -97,8 +103,12 @@ export class Enemy {
 		const hasArt = artReady(`enemy_${this.type}`) || artAnimCount(`enemy_${this.type}`, `enemy_${this.type.toLowerCase()}`) > 0;
 		if (!hasArt) {
 			drawRect(this.bodyDraw, -hw, 0, cfg.width, cfg.height, fill, 0xff1a202c);
-			// 倭刀朝左指示
-			drawRect(this.bodyDraw, -hw - 16, cfg.height * 0.45, 16, 4, 0xffe2e8f0);
+			// 倭刀指向目标：东面来敌朝左、西面来敌朝右
+			if (this.dir === 1) {
+				drawRect(this.bodyDraw, hw, cfg.height * 0.45, 16, 4, 0xffe2e8f0);
+			} else {
+				drawRect(this.bodyDraw, -hw - 16, cfg.height * 0.45, 16, 4, 0xffe2e8f0);
+			}
 		}
 		// 血条（有底框素材时只画填充，底框由 e10 提供）
 		const pct = Math.max(0, this.hp / this.maxHp);
@@ -184,6 +194,8 @@ export class Enemy {
 		this.animClock += dt;
 		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
 		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
+		// 逐帧图默认朝左；西面来敌整体镜像
+		this.artNode.scaleX = this.dir === 1 ? -1 : 1;
 	}
 
 	public update(dt: number, villagers: Villager[]): void {
@@ -209,9 +221,10 @@ export class Enemy {
 				this.bribed = false;
 				this.refreshVisual();
 			} else {
-				this.x += cfg0.moveSpeed * 1.3 * dt;
+				// 收银后退回自己登岸的那一头
+				this.x += -this.dir * cfg0.moveSpeed * 1.3 * dt;
 				this.node.x = this.x;
-				if (this.x >= GameConfig.MAP_WIDTH - 130) {
+				if (this.x >= GameConfig.MAP_WIDTH - 130 || this.x <= 130) {
 					this.escaped = true;
 					this.node.removeFromParent();
 				}
@@ -250,11 +263,17 @@ export class Enemy {
 
 		// 1.5 夜袭猎杀：天黑后主动追杀滞留在城外的族丁（玩家可用 [K] 鸣鼓召回或派兵救援）
 		if (gs.phase === 'NIGHT') {
-			const wallX = GameConfig.MAP_LANDMARKS.EAST_GATE.x;
+			const wallX =
+				this.side === 'E'
+					? GameConfig.MAP_LANDMARKS.EAST_GATE.x
+					: GameConfig.MAP_LANDMARKS.INNER_GATE.x;
 			let straggler: Villager | undefined = undefined;
 			let huntDist = GameConfig.ENEMY_HUNT_RANGE;
 			for (const v of villagers) {
-				if (v.dead || v.x <= wallX) continue;
+				if (v.dead) continue;
+				// 只猎杀自己这一侧城外的人
+				const outside = this.side === 'E' ? v.x > wallX : v.x < wallX;
+				if (!outside) continue;
 				const d = Math.abs(v.x - this.x);
 				if (d <= huntDist) {
 					huntDist = d;
@@ -276,9 +295,9 @@ export class Enemy {
 			}
 		}
 
-		// 2. 检查是否被东门阻挡（关闭且有耐久）
+		// 2. 东面来敌：先叩东门（闭门且完好时）
 		const eastGateX = GameConfig.MAP_LANDMARKS.EAST_GATE.x;
-		if (!gs.eastGateOpen && gs.eastGateHp > 0 && this.x >= eastGateX) {
+		if (this.side === 'E' && !gs.eastGateOpen && gs.eastGateHp > 0 && this.x >= eastGateX) {
 			if (this.x - eastGateX <= cfg.attackRange + 24) {
 				if (this.attackTimer <= 0) {
 					this.attackTimer = cfg.attackInterval;
@@ -288,10 +307,11 @@ export class Enemy {
 			}
 		}
 
-		// 3. 检查是否被内城水门阻挡
+		// 3. 两路来敌都要先破内城水门（西面来敌从西侧凿门）
 		const innerGateX = GameConfig.MAP_LANDMARKS.INNER_GATE.x;
-		if (gs.innerGateHp > 0 && this.x >= innerGateX) {
-			if (this.x - innerGateX <= cfg.attackRange + 20) {
+		if (gs.innerGateHp > 0) {
+			const reached = this.side === 'E' ? this.x >= innerGateX : this.x <= innerGateX;
+			if (reached && Math.abs(this.x - innerGateX) <= cfg.attackRange + 20) {
 				if (this.attackTimer <= 0) {
 					this.attackTimer = cfg.attackInterval;
 					gs.innerGateHp = Math.max(0, gs.innerGateHp - cfg.attackDamage);
@@ -300,9 +320,9 @@ export class Enemy {
 			}
 		}
 
-		// 4. 攻击王氏宗祠
+		// 4. 攻击王氏宗祠（两端来敌都得先打到城中）
 		const hallX = GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x;
-		if (this.x - hallX <= cfg.attackRange + 36) {
+		if (Math.abs(this.x - hallX) <= cfg.attackRange + 36) {
 			if (this.attackTimer <= 0) {
 				this.attackTimer = cfg.attackInterval;
 				gs.ancestralHallHp = Math.max(0, gs.ancestralHallHp - cfg.attackDamage);
@@ -310,8 +330,11 @@ export class Enemy {
 			return;
 		}
 
-		// 向左推进
-		this.x = Math.max(hallX, this.x - cfg.moveSpeed * dt);
+		// 朝宗祠推进（东面来敌向左，西面来敌向右）
+		this.x =
+			this.side === 'E'
+				? Math.max(hallX, this.x - cfg.moveSpeed * dt)
+				: Math.min(hallX, this.x + cfg.moveSpeed * dt);
 		this.node.x = this.x;
 	}
 }

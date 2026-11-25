@@ -608,7 +608,7 @@ export class HudLayer {
 
 		// 提示条上的工具图标：水田→锄头、盐课司→盐铲
 		const toolIconId =
-			nearestLandmark === 'PADDY_FIELD'
+			nearestLandmark === 'WEST_PADDY' || nearestLandmark === 'EAST_PADDY'
 				? 'icon_tool_hoe'
 				: (nearestLandmark === 'SALT_OFFICE' ? 'icon_tool_shovel' : undefined);
 		if (toolIconId === undefined) {
@@ -659,11 +659,71 @@ export class HudLayer {
 			this.extraActionNode.addChild(b1);
 			this.extraActionNode.addChild(b2);
 		} else if (landmark === 'INNER_GATE') {
+			const innerTower = gs.towers.find((t) => t.id === 'INNER_TOWER');
+			const towerUnlocked = innerTower !== undefined && innerTower.unlocked;
 			const b1 = createButton('置办木锤 (70银)', 155, 34, 0xffdd6b20, () => this.callbacks.onInteract(0), 13, 'icon_tool_hammer');
-			const b2 = createButton('解锁内城炮台 (150银)', 180, 34, 0xff4a5568, () => this.callbacks.onInteract(1), 13);
-			b2.x = 165;
+			const b2 = createButton(
+				towerUnlocked ? `内城炮台 Lv.${gs.innerGateLevel}` : '解锁内城炮台 (150银)',
+				160,
+				34,
+				0xff4a5568,
+				() => this.callbacks.onInteract(1),
+				13
+			);
+			b2.x = 155;
+			const b3 = createButton(
+				`加固水门 Lv.${gs.innerGateLevel}→${Math.min(gs.innerGateLevel + 1, GameConfig.INNER_GATE_MAX_LEVEL)}`,
+				170,
+				34,
+				0xff805ad5,
+				() => this.callbacks.onInteract(2),
+				13
+			);
+			b3.x = 315;
 			this.extraActionNode.addChild(b1);
 			this.extraActionNode.addChild(b2);
+			this.extraActionNode.addChild(b3);
+		} else if (landmark === 'WEST_PADDY' || landmark === 'EAST_PADDY' || landmark === 'WEST_SALT_FLAT' || landmark === 'EAST_SALT_FLAT') {
+			const isPaddy = landmark === 'WEST_PADDY' || landmark === 'EAST_PADDY';
+			const kind = isPaddy ? 'PADDY' : 'SALT';
+			const level = gs.landLevelOf(landmark);
+			const toolText = isPaddy ? '置办锄头' : '置办盐铲';
+			const toolIcon = isPaddy ? 'icon_tool_hoe' : 'icon_tool_shovel';
+			const toolCost = isPaddy ? GameConfig.ROLES.FARMER.toolCost : GameConfig.ROLES.SALT_WORKER.toolCost;
+			const b1 = createButton(
+				`${toolText} (${toolCost}银)`,
+				150,
+				34,
+				0xffdd6b20,
+				() => this.callbacks.onInteract(0),
+				13,
+				toolIcon
+			);
+			const maxed = level >= GameConfig.RECLAIM.MAX_LEVEL;
+			const nextCost = GameConfig.RECLAIM.COST[kind] * (level + 1);
+			const b2 = createButton(
+				maxed ? `熟田 Lv.${level}（已满）` : `开垦 Lv.${level}→${level + 1} (${nextCost}银)`,
+				190,
+				34,
+				maxed ? 0xff4a5568 : 0xff2f855a,
+				() => this.callbacks.onInteract(1),
+				13
+			);
+			b2.x = 150;
+			this.extraActionNode.addChild(b1);
+			this.extraActionNode.addChild(b2);
+		} else if (landmark === 'SALT_OFFICE') {
+			const cost = GameConfig.ROLES.SALT_WORKER.toolCost;
+			const b1 = createButton(
+				`置办盐铲 (${cost}银)`,
+				150,
+				34,
+				0xffdd6b20,
+				() => this.callbacks.onInteract(0),
+				13,
+				'icon_tool_shovel'
+			);
+			this.extraActionNode.addChild(b1);
 		} else if (landmark === 'MAIN_WALL') {
 			const b1 = createButton('置办长枪 (75银)', 155, 34, 0xff3182ce, () => this.callbacks.onInteract(0), 13, 'icon_tool_spear');
 			const b2 = createButton('置办拳谱 (110银)', 165, 34, 0xffe53e3e, () => this.callbacks.onInteract(1), 13, 'icon_tool_manual');
@@ -676,6 +736,9 @@ export class HudLayer {
 			b2.x = 125;
 			this.extraActionNode.addChild(b1);
 			this.extraActionNode.addChild(b2);
+		} else if (landmark === 'WEST_COAST' || landmark === 'EAST_COAST') {
+			const b1 = createButton('东西登岸滩头', 140, 34, 0xff4a5568, () => this.callbacks.onInteract(0), 13);
+			this.extraActionNode.addChild(b1);
 		}
 	}
 }

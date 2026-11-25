@@ -192,11 +192,11 @@ A 2D side-view game tower sprite of a Ming dynasty fortress archer watchtower, s
 A 2D side-view game tower sprite of a Ming dynasty stone artillery bastion (#4A5568), sturdy granite masonry base with stone parapets, mounting a historical Chinese-Portuguese bronze Folangji breech-loading cannon pointing to the right. Strict orthographic side elevation, bottom-aligned. Flat semi-shaded Chinese guofeng 2D game art style, clean 1.5px dark outline (#1A202C), max 3 shading tones per surface, upper-left light, NO text, no ground shadow, pure solid white background.
 ```
 
-### B09 大罗山（远山，320×720）
-- **画布比例**：`9:16`（目标尺寸 320×720）
+### B09 战争迷雾罩（400×400，可平铺）
+- **画布比例**：`1:1`（目标尺寸 400×400，四边可无缝平铺）
 - **提示词**：
 ```text
-A 2D game background layer of distant southern Zhejiang coastal mountains (Daluo Mountain), painted in Chinese ink-wash silhouette style fading from muted slate blue-green (#2F4F4F, #2C3E50) at the peaks down to soft mist at the base. Flat guofeng game art style, minimal detail, no trees close-up, no text, isolated on pure solid white background.
+A seamless tileable 2D game fog-of-war overlay texture, soft ink-wash cloud and mist swirls in deep ink blue (#0B1220) at about 87% opacity, edges dissolving to transparency, no hard lines, no text, pure transparent background, perfectly tileable on all four sides.
 ```
 
 ### B10 & B11 城外盐田滩涂与东海倭船（1120×56 / 280×120）

@@ -34,6 +34,11 @@ desktop.ini
 .idea/
 *.swp
 
-# 本地调试脚本与临时请求（tools/_*.py / _*.lua / _*_req.json）
-tools/_*
+# 本地调试脚本与临时请求（自检脚本 `_probe_*.py` / `_probe_*.lua` 要留给协作者，
+# 只忽略脚本生成的请求/输出文件）
+tools/_*.json
+tools/_*.txt
 tools/__pycache__/
+
+# 运行时自检探针：手写的 lua（不是编译产物），要随自检脚本一起入库
+!tools/_probe_*.lua

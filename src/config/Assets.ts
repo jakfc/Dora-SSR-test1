@@ -65,12 +65,16 @@ export const ART: Record<string, ArtSpec> = {
 	'over_victory': { path: 'assets/bg/d10_victory.png', stretch: true, ax: 0, ay: 0 },
 	'over_defeat': { path: 'assets/bg/d11_defeat.png', stretch: true, ax: 0, ay: 0 },
 
-	// ---------- 地标建筑 ----------
+	// ---------- 地标建筑：升级 = 换一座楼，每级都有独立模型 ----------
 	'lm_ANCESTRAL_HALL': { path: 'assets/buildings/b01_shrine.png', w: 180, padBottom: 0.011 },
 	'lm_ANCESTRAL_HALL_lv2': { path: 'assets/buildings/b01_shrine_lv2.png', w: 180, padBottom: 0.011 },
-	'lm_PADDY_FIELD': { path: 'assets/buildings/b02_paddy.png', w: 220, padBottom: 0.045 },
+	'lm_ANCESTRAL_HALL_lv3': { path: 'assets/buildings/b01_shrine_lv3.png', w: 196, padBottom: 0.011 },
+	'lm_ANCESTRAL_HALL_lv4': { path: 'assets/buildings/b01_shrine_lv4.png', w: 212, padBottom: 0.011 },
+	'lm_ANCESTRAL_HALL_lv5': { path: 'assets/buildings/b01_shrine_lv5.png', w: 232, padBottom: 0.011 },
 	'lm_SALT_OFFICE': { path: 'assets/buildings/b03_salt_office.png', w: 170 },
 	'lm_INNER_GATE': { path: 'assets/buildings/b04_inner_water_gate.png', w: 130, padBottom: 0.003 },
+	'lm_INNER_GATE_lv2': { path: 'assets/buildings/b04_inner_water_gate_lv2.png', w: 136, padBottom: 0.003 },
+	'lm_INNER_GATE_lv3': { path: 'assets/buildings/b04_inner_water_gate_lv3.png', w: 144, padBottom: 0.003 },
 	'lm_INNER_GATE_broken': { path: 'assets/buildings/b04_inner_water_gate_broken.png', w: 130, padBottom: 0.003 },
 	'lm_MAIN_WALL': { path: 'assets/buildings/b05_main_wall.png', w: 180 },
 	'lm_EAST_GATE': { path: 'assets/buildings/b06_east_gate_barbican.png', w: 140, padBottom: 0.009 },
@@ -78,16 +82,30 @@ export const ART: Record<string, ArtSpec> = {
 	'lm_EAST_GATE_open': { path: 'assets/buildings/b06_east_gate_barbican.png', w: 140, padBottom: 0.009, cropTop: 0.47 },
 	// 城门被攻破（耐久归零）后的破损态
 	'lm_EAST_GATE_broken': { path: 'assets/buildings/b06_east_gate_broken.png', w: 140, padBottom: 0.009 },
+	'lm_EAST_GATE_lv2': { path: 'assets/buildings/b06_east_gate_lv2.png', w: 152, padBottom: 0.009 },
+	'lm_EAST_GATE_lv3': { path: 'assets/buildings/b06_east_gate_lv3.png', w: 166, padBottom: 0.009 },
+	// 民居：每级一座（lv0 是空地地基）
+	'lm_house_plot': { path: 'assets/buildings/b12_house_plot.png', w: 84 },
+	'lm_house_lv1': { path: 'assets/buildings/b12_house_lv1.png', w: 76 },
+	'lm_house_lv2': { path: 'assets/buildings/b12_house_lv2.png', w: 90 },
+	'lm_house_lv3': { path: 'assets/buildings/b12_house_lv3.png', w: 104 },
+	// 水田：荒地 → 熟田，每级一张（东西两块水田共用）
+	'lm_paddy_lv0': { path: 'assets/buildings/b02_paddy_lv0.png', w: 300, padBottom: 0.045 },
+	'lm_paddy_lv1': { path: 'assets/buildings/b02_paddy.png', w: 300, padBottom: 0.045 },
+	'lm_paddy_lv2': { path: 'assets/buildings/b02_paddy_lv2.png', w: 300, padBottom: 0.045 },
+	'lm_paddy_lv3': { path: 'assets/buildings/b02_paddy_lv3.png', w: 300, padBottom: 0.045 },
+	// 盐田：荒地 → 盐场，每级一张（东西两块盐田共用）
+	'lm_saltflat_lv0': { path: 'assets/buildings/b10_saltflat_lv0.png', w: 760, padBottom: 0.03 },
+	'lm_saltflat_lv1': { path: 'assets/bg/b10_outer_salt_flat.png', w: 760, padBottom: 0.03 },
+	'lm_saltflat_lv2': { path: 'assets/buildings/b10_saltflat_lv2.png', w: 760, padBottom: 0.03 },
+	'lm_saltflat_lv3': { path: 'assets/buildings/b10_saltflat_lv3.png', w: 760, padBottom: 0.03 },
 	// 敌台：lv1 是低矮炮台、lv2 画布更宽更高，按可见内容同宽折算保持像素比例
 	'tower_arrow': { path: 'assets/buildings/b07_tower_arrow.png', w: 72 },
 	'tower_cannon': { path: 'assets/buildings/b08_tower_cannon.png', w: 72, padBottom: 0.019 },
 	'tower_arrow_lv2': { path: 'assets/buildings/b07_tower_arrow_lv2.png', w: 93 },
 	'tower_cannon_lv2': { path: 'assets/buildings/b08_tower_cannon_lv2.png', w: 77 },
-
-	// 远景与城外（位置已留好，丢文件即可生效；缺文件时仍用色块）
-	'lm_DALUO_MOUNTAIN': { path: 'assets/bg/b09_daluo_mountain.png', h: 380 },
-	'lm_OUTER_SALT_FLAT': { path: 'assets/bg/b10_outer_salt_flat.png', w: 560 },
-	'lm_COAST_SPAWN': { path: 'assets/bg/b11_coast.png', w: 260 },
+	// 东西海岸登陆点（同一张滩头图，摆在两头）
+	'lm_coast': { path: 'assets/bg/b11_coast.png', w: 300 },
 
 	// ---------- 角色 ----------
 	'player_idle': { path: 'assets/sprites/player/player_idle_01.png', h: 54, padTop: 0.042, padBottom: 0.042 },

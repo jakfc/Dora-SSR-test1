@@ -1,4 +1,4 @@
-import { GameConfig, ProjectKind, TowerType, VillagerRole } from 'src/config/GameConfig';
+import { GameConfig, LandmarkId, ProjectKind, TowerType, VillagerRole } from 'src/config/GameConfig';
 
 export type DayPhase = 'DAY' | 'NIGHT';
 
@@ -96,6 +96,10 @@ export class GameState {
 
 	/** 民居（人口容量 + 自然添丁） */
 	public houses: HouseState[] = [];
+	/** 可开垦地块等级（LandmarkId → 已开垦等级，0 = 荒地未开垦） */
+	public landLevels: Record<string, number> = {};
+	/** 地图迷雾：已探索的迷雾区 id */
+	public explored: Record<string, boolean> = {};
 	/** 已投入的银两（按目标 id 累计，例：'HALL'、'EAST_GATE'、'TOWER:INNER_TOWER'、'HOUSE:0'） */
 	public donations: Record<string, number> = {};
 	/** 民居自然添丁计时 */
@@ -162,6 +166,15 @@ export class GameState {
 		this.donations = {};
 		this.houseSpawnTimer = 0;
 		this.houseSpawnCursor = 0;
+
+		// 可开垦地块开局都是荒地（level 0）
+		this.landLevels = {};
+		for (const id of Object.keys(GameConfig.MAP_LANDMARKS) as LandmarkId[]) {
+			if (GameConfig.MAP_LANDMARKS[id].reclaimable !== undefined) this.landLevels[id] = 0;
+		}
+		// 迷雾：城堡核心区开局已亮，四野待探索
+		this.explored = {};
+		for (const z of GameConfig.FOG_ZONES) this.explored[z.id] = z.startRevealed === true;
 		this.totalKills = 0;
 		this.wavesCleared = 0;
 		this.toolsCrafted = 0;
@@ -254,10 +267,11 @@ export class GameState {
 
 	/** 城外（内城水门以东）尚在人世的族丁数，用于黄昏未归警报。 */
 	public get stragglerCount(): number {
-		const innerX = GameConfig.MAP_LANDMARKS.INNER_GATE.x;
+		const westWallX = GameConfig.MAP_LANDMARKS.INNER_GATE.x;
+		const eastWallX = GameConfig.MAP_LANDMARKS.EAST_GATE.x;
 		let count = 0;
 		for (const v of this.villagers) {
-			if (v.hp > 0 && v.x > innerX) count++;
+			if (v.hp > 0 && (v.x < westWallX || v.x > eastWallX)) count++;
 		}
 		return count;
 	}
@@ -347,6 +361,62 @@ export class GameState {
 		return this.food <= 0;
 	}
 
+	// ---- 开垦与迷雾 ----
+
+	/** 地块当前开垦等级（0 = 荒地） */
+	public landLevelOf(id: string): number {
+		const v = this.landLevels[id];
+		return v === undefined ? 0 : v;
+	}
+
+	/** 地块是否已开垦（等级 ≥ 1，可以派人产出） */
+	public isLandReady(id: string): boolean {
+		return this.landLevelOf(id) > 0;
+	}
+
+	/** 某类可开垦地块（PADDY 水田 / SALT 盐田），供族丁就近择地劳作 */
+	public landPlots(kind: 'PADDY' | 'SALT'): LandmarkId[] {
+		const out: LandmarkId[] = [];
+		for (const id of Object.keys(GameConfig.MAP_LANDMARKS) as LandmarkId[]) {
+			if (GameConfig.MAP_LANDMARKS[id].reclaimable === kind) out.push(id);
+		}
+		return out;
+	}
+
+	/** 水田总开垦等级（HUD 展示：粮产加成） */
+	public get paddyLevels(): number {
+		let total = 0;
+		for (const id of this.landPlots('PADDY')) total += this.landLevelOf(id);
+		return total;
+	}
+
+	/** 盐田总开垦等级（HUD 展示：盐产出盐加成） */
+	public get saltLevels(): number {
+		let total = 0;
+		for (const id of this.landPlots('SALT')) total += this.landLevelOf(id);
+		return total;
+	}
+
+	public isExplored(zoneId: string): boolean {
+		return this.explored[zoneId] === true;
+	}
+
+	/** 揭开一片迷雾；返回是否为新揭开 */
+	public revealZone(zoneId: string): boolean {
+		if (this.explored[zoneId] === true) return false;
+		this.explored[zoneId] = true;
+		return true;
+	}
+
+	/** 尚有迷雾未揭开的区域数 */
+	public get foggedCount(): number {
+		let n = 0;
+		for (const z of GameConfig.FOG_ZONES) {
+			if (this.explored[z.id] !== true) n++;
+		}
+		return n;
+	}
+
 	public addSilver(amount: number): void {
 		if (amount <= 0) return;
 		this.silver += amount;
@@ -368,14 +438,17 @@ export class GameState {
 		this.food = Math.max(0, this.food - amount);
 	}
 
+	/** 东面防线：东门关着守东门；门开着或已被破，敌锋直指宗祠，就退守宗祠前 */
 	public getFrontDefenseX(): number {
 		if (this.eastGateHp > 0 && !this.eastGateOpen) {
 			return GameConfig.EAST_GATE_DEFENSE_X;
 		}
-		if (this.eastGateHp > 0 && this.phase === 'DAY') {
-			return GameConfig.EAST_GATE_DEFENSE_X;
-		}
-		return GameConfig.INNER_GATE_DEFENSE_X;
+		return GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x + 60;
+	}
+
+	/** 西面防线：内城水门（西墙） */
+	public getWestDefenseX(): number {
+		return GameConfig.MAP_LANDMARKS.INNER_GATE.x;
 	}
 
 	public getRoleCount(role: VillagerRole): number {

@@ -19,20 +19,24 @@ export type TowerType = 'ARROW' | 'CANNON';
 export type ProjectKind =
 	| 'HALL_UPGRADE'
 	| 'EAST_GATE_UPGRADE'
+	| 'INNER_GATE_UPGRADE'
 	| 'TOWER_UNLOCK'
 	| 'TOWER_UPGRADE'
-	| 'HOUSE_UPGRADE';
+	| 'HOUSE_UPGRADE'
+	| 'LAND_RECLAIM';
 
 export type LandmarkId =
-	| 'DALUO_MOUNTAIN'
-	| 'ANCESTRAL_HALL'
-	| 'PADDY_FIELD'
-	| 'SALT_OFFICE'
+	| 'WEST_COAST'
+	| 'WEST_SALT_FLAT'
+	| 'WEST_PADDY'
 	| 'INNER_GATE'
+	| 'ANCESTRAL_HALL'
+	| 'SALT_OFFICE'
 	| 'MAIN_WALL'
 	| 'EAST_GATE'
-	| 'OUTER_SALT_FLAT'
-	| 'COAST_SPAWN';
+	| 'EAST_PADDY'
+	| 'EAST_SALT_FLAT'
+	| 'EAST_COAST';
 
 export interface LandmarkConfig {
 	id: LandmarkId;
@@ -44,6 +48,19 @@ export interface LandmarkConfig {
 	color: number; // ARGB 0xAARRGGBB
 	description: string;
 	interactHint: string;
+	/** 可开垦地块：水田（产粮）或盐田（产银）；不填即为普通建筑地标 */
+	reclaimable?: 'PADDY' | 'SALT';
+}
+
+export interface FogZoneConfig {
+	id: string;
+	name: string;
+	/** 迷雾区中心世界坐标 */
+	x: number;
+	/** 迷雾区宽度 */
+	width: number;
+	/** 开局是否已亮（城堡核心区是亮的） */
+	startRevealed?: boolean;
 }
 
 export interface RoleConfig {
@@ -82,6 +99,8 @@ export interface WaveSpawnGroup {
 	count: number;
 	interval: number;
 	delay: number;
+	/** 登岸面：W 从西湾上岸（向右推进），E 从东海上岸（向左推进）；缺省按组序自动东西交替 */
+	side?: 'W' | 'E';
 }
 
 export interface NightWaveConfig {
@@ -103,14 +122,19 @@ export const GameConfig = {
 	// 视图与地图空间常量 (1D 逻辑，2D 卷轴)
 	SCREEN_WIDTH: 1280,
 	SCREEN_HEIGHT: 720,
-	MAP_WIDTH: 5400,
+	// 大地图：西海 — 西滩（盐田/水田）— 城堡（内城水门/宗祠/盐课司/主墙/东门）— 东滩（水田/盐田）— 东海
+	// 左右两头都是倭寇上岸点，永昌堡夹在中间，四面受敌（参考《王国：新大陆》）。
+	MAP_WIDTH: 7600,
 	GROUND_Y: 160,
-	CAMERA_MIN_X: 640,
-	CAMERA_MAX_X: 4760,
-	SAFE_LINE_X: 2460,
-	SPAWN_X: 5240,
-	OUTER_ZONE_MIN_X: 2800,
-	OUTER_ZONE_MAX_X: 4900,
+	CAMERA_MIN_X: 480,
+	CAMERA_MAX_X: 7120,
+	SAFE_LINE_X: 2350,
+	SPAWN_EAST_X: 7420,
+	SPAWN_WEST_X: 260,
+	/** 东岸到宗祠的路比西岸长；西岸贼兵按这个比例延后登岸（1 = 完全抵平路程差） */
+	WEST_LANDING_DELAY_RATIO: 0.6,
+	OUTER_ZONE_MIN_X: 600,
+	OUTER_ZONE_MAX_X: 7100,
 
 	// 初始资源与建筑参数
 	INITIAL_SILVER: 260,
@@ -122,9 +146,10 @@ export const GameConfig = {
 	// ---- 民居（人口之源）----
 	// 人口上限 = min(住房容量, 粮食能养活的人数)；人慢慢从民居自然添丁，或花银子招募
 	HOUSE_SLOTS: [
-		{ x: 620, level: 1 },
-		{ x: 1040, level: 1 },
-		{ x: 1420, level: 1 },
+		{ x: 2450, level: 1 },
+		{ x: 2700, level: 1 },
+		{ x: 3000, level: 1 },
+		{ x: 3280, level: 1 },
 	],
 	HOUSE_MAX_LEVEL: 3,
 	// 每级民居可住的族丁数（lv1=2, lv2=4, lv3=6）
@@ -172,10 +197,12 @@ export const GameConfig = {
 	CONSTRUCTION_SECONDS: {
 		HALL_UPGRADE: 16,
 		EAST_GATE_UPGRADE: 14,
+		INNER_GATE_UPGRADE: 14,
 		INNER_GATE_REPAIR: 0,
 		TOWER_UNLOCK: 12,
 		TOWER_UPGRADE: 10,
 		HOUSE_UPGRADE: 12,
+		LAND_RECLAIM: 12,
 	} as Record<ProjectKind, number>,
 	// 工期推进速率：基础自动推进 + 每名在场工匠加成，上限
 	BUILD_RATE_IDLE: 0.3,
@@ -206,19 +233,22 @@ export const GameConfig = {
 
 	INNER_GATE_BASE_HP: 600,
 	INNER_GATE_UPGRADE_COST: 140,
-	INNER_GATE_DEFENSE_X: 1610,
+	INNER_GATE_MAX_LEVEL: 3,
+	INNER_GATE_DEFENSE_X: 2280,
 
 	EAST_GATE_BASE_HP: 800,
 	EAST_GATE_UPGRADE_BASE_COST: 160,
 	EAST_GATE_MAX_LEVEL: 3,
-	EAST_GATE_DEFENSE_X: 2410,
+	EAST_GATE_DEFENSE_X: 3380,
 
-	// 敌台防御塔配置
+	// 敌台防御塔配置（东西两面滩头 + 城堡三道防线）
 	TOWER_SLOTS: [
-		{ id: 'INNER_TOWER', x: 1700, defaultType: 'CANNON' as TowerType, unlocked: false, unlockCost: 150 },
-		{ id: 'WALL_TOWER', x: 2060, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
-		{ id: 'EAST_TOWER', x: 2420, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
-		{ id: 'SALT_TOWER', x: 3300, defaultType: 'ARROW' as TowerType, unlocked: false, unlockCost: 220 },
+		{ id: 'WEST_SALT_TOWER', x: 1200, defaultType: 'ARROW' as TowerType, unlocked: false, unlockCost: 220 },
+		{ id: 'WEST_TOWER', x: 2150, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
+		{ id: 'INNER_TOWER', x: 2450, defaultType: 'CANNON' as TowerType, unlocked: false, unlockCost: 150 },
+		{ id: 'WALL_TOWER', x: 3150, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
+		{ id: 'EAST_TOWER', x: 3520, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
+		{ id: 'EAST_SALT_TOWER', x: 4650, defaultType: 'ARROW' as TowerType, unlocked: false, unlockCost: 220 },
 	],
 	TOWER_STATS: {
 		ARROW: {
@@ -248,11 +278,34 @@ export const GameConfig = {
 
 	// 全局节奏：1 = 原速。作用在每一帧的 dt 上，移动 / 攻速 / 工期 / 招募 /
 	// 日夜循环 / 动画速度会整体同步放慢，调一个数字即可改全局节奏。
-	GAME_SPEED: 0.78,
+	GAME_SPEED: 0.6,
+
+	// ---- 开垦：水田与盐田起始都是荒地，须投银 + 工期开垦才能产出 ----
+	RECLAIM: {
+		MAX_LEVEL: 3,
+		// 升到下一级需投的白银（每级累加）
+		COST: { PADDY: 120, SALT: 150 } as Record<string, number>,
+		// 开垦一级的基础工期（秒），每级 +25%
+		SECONDS: { PADDY: 11, SALT: 13 } as Record<string, number>,
+		// 每级水田追加的粮产（在农夫 ROLES.FARMER.produceAmount 基础上叠加）
+		PADDY_YIELD_PER_LEVEL: 15,
+		// 每级盐田追加的每趟出盐白银
+		SALT_YIELD_PER_LEVEL: 120,
+	},
+
+	// ---- 地图迷雾：未探索区域盖着黑幕，人走到跟前才揭形（《王国》式开拓感）----
+	FOG_ZONES: [
+		{ id: 'WEST_WILD', name: '西滩荒野', x: 600, width: 1650, startRevealed: false },
+		{ id: 'FORTRESS', name: '永昌堡', x: 2250, width: 1450, startRevealed: true },
+		{ id: 'EAST_WILD', name: '东滩荒野', x: 3700, width: 3350, startRevealed: false },
+		{ id: 'EAST_SEA', name: '东海', x: 7050, width: 550, startRevealed: false },
+	] as FogZoneConfig[],
+	// 迷雾揭开半径：族丁踏入区域边线以内（或贴边这个距离）才揭开，不会轻易望穿荒滩
+	FOG_REVEAL_RADIUS: 120,
 
 	// 日夜循环常量
 	TOTAL_NIGHTS: 8,
-	DAY_DURATION: 48,
+	DAY_DURATION: 66,
 	DUSK_WARNING_TIME: 10,
 	FOOD_CONSUME_INTERVAL: 5,
 	FOOD_CONSUME_PER_COMBAT_UNIT: 2,
@@ -266,7 +319,7 @@ export const GameConfig = {
 	PLAYER: {
 		name: '王叔杲',
 		title: '筑堡总指挥',
-		startX: 460,
+		startX: 2470,
 		moveSpeed: 320,
 		interactRange: 95,
 		dashDistance: 110,
@@ -283,44 +336,45 @@ export const GameConfig = {
 
 	// 关键地标配置 (MAP_LANDMARKS)
 	MAP_LANDMARKS: {
-		DALUO_MOUNTAIN: {
-			id: 'DALUO_MOUNTAIN',
-			name: '大罗山',
-			subtitle: '西屏屏障',
-			x: 80,
-			width: 160,
-			height: 360,
-			color: 0xff2f4f4f,
-			description: '永嘉场西侧天然山屏，俯瞰龙湾盐田与东海海岸。',
-			interactHint: '山川形胜，永昌堡背山面海之基。',
+		WEST_COAST: {
+			id: 'WEST_COAST',
+			name: '西湾登陆点',
+			subtitle: '倭寇西面登岸处',
+			x: 300,
+			width: 300,
+			height: 80,
+			color: 0xff1e4e79,
+			description: '西面海域，倭寇船只由此登岸，向西城墙横推。',
+			interactHint: '西海前哨：倭寇亦从此面上岸，两面受敌。',
 		},
 		ANCESTRAL_HALL: {
 			id: 'ANCESTRAL_HALL',
 			name: '王氏宗祠',
 			subtitle: '江南故宫 · 核心',
-			x: 460,
+			x: 2620,
 			width: 180,
 			height: 180,
 			color: 0xff9b2c2c,
 			description: '英桥王氏宗祠，基地核心。耐久归零则堡破人亡。',
 			interactHint: '[E] 投一袋银饷 (40两) 招募族丁；点「升级宗祠」投银升士气',
 		},
-		PADDY_FIELD: {
-			id: 'PADDY_FIELD',
-			name: '堡内水田',
-			subtitle: '军粮自给',
-			x: 860,
-			width: 220,
+		WEST_PADDY: {
+			id: 'WEST_PADDY',
+			name: '西滩水田',
+			subtitle: '荒地 · 待开垦',
+			x: 1950,
+			width: 300,
 			height: 44,
 			color: 0xff68a357,
-			description: '堡内开垦水田自给自足。农夫每5秒产出15粮草，断粮时义师攻速减半。',
-			interactHint: '[E] 置办【锄头】 (50白银) -> 闲置族丁拾取转为农夫',
+			description: '西城墙外的荒滩。须由工匠投银开垦成水田，农夫方能耕作产粮；等级越高，粮产越厚。',
+			interactHint: '[E] 投银开垦水田，再置办【锄头】派农夫耕作。',
+			reclaimable: 'PADDY',
 		},
 		SALT_OFFICE: {
 			id: 'SALT_OFFICE',
 			name: '永嘉场盐课司',
 			subtitle: '白银命脉',
-			x: 1260,
+			x: 2900,
 			width: 170,
 			height: 130,
 			color: 0xffd6b36a,
@@ -331,7 +385,7 @@ export const GameConfig = {
 			id: 'INNER_GATE',
 			name: '内城水门与作坊',
 			subtitle: '第二道防线',
-			x: 1660,
+			x: 2350,
 			width: 130,
 			height: 190,
 			color: 0xff5a6772,
@@ -342,7 +396,7 @@ export const GameConfig = {
 			id: 'MAIN_WALL',
 			name: '主城墙 · 校场',
 			subtitle: '十八号包干分段',
-			x: 2060,
+			x: 3150,
 			width: 180,
 			height: 150,
 			color: 0xff718096,
@@ -353,31 +407,56 @@ export const GameConfig = {
 			id: 'EAST_GATE',
 			name: '环海楼与东门瓮城',
 			subtitle: '第一道核心防线',
-			x: 2460,
+			x: 3450,
 			width: 140,
 			height: 220,
 			color: 0xff4a5568,
 			description: '环海楼带瓮城，永昌堡东向第一道防线。入夜前务必关闭城门！',
 			interactHint: '[E] 开关东门 / 加固东门瓮城（需工期）',
 		},
-		OUTER_SALT_FLAT: {
-			id: 'OUTER_SALT_FLAT',
-			name: '城外盐田与滩涂',
-			subtitle: '灶户取盐区 · 白天高危',
-			x: 3500,
-			width: 1500,
+		EAST_PADDY: {
+			id: 'EAST_PADDY',
+			name: '东滩水田',
+			subtitle: '荒地 · 待开垦',
+			x: 3850,
+			width: 300,
+			height: 44,
+			color: 0xff68a357,
+			description: '东城墙外的荒滩。须投银开垦成水田，农夫方能耕作产粮。',
+			interactHint: '[E] 投银开垦水田，再置办【锄头】派农夫耕作。',
+			reclaimable: 'PADDY',
+		},
+		WEST_SALT_FLAT: {
+			id: 'WEST_SALT_FLAT',
+			name: '西滩盐田',
+			subtitle: '荒地 · 待开垦',
+			x: 1200,
+			width: 760,
 			height: 28,
 			color: 0xffb79f78,
-			description: '城外盐田，灶户在此装盐；散落无主盐包(+80银)与漂流木料(+50修复)。黄昏前须全员撤回城内，否则必遭倭寇屠戮。',
-			interactHint: '灶户自动来此装盐；可在盐田侧筑敌台护盐 (220银)。',
+			description: '西面滩涂。须投银开垦成盐田，灶户方能晒盐背盐；等级越高，每趟出盐越多。',
+			interactHint: '[E] 投银开垦盐田，再置办【盐铲】派灶户晒盐。',
+			reclaimable: 'SALT',
 		},
-		COAST_SPAWN: {
-			id: 'COAST_SPAWN',
-			name: '东海海岸',
-			subtitle: '倭寇登岸处',
-			x: 5000,
-			width: 240,
-			height: 60,
+		EAST_SALT_FLAT: {
+			id: 'EAST_SALT_FLAT',
+			name: '东滩盐田',
+			subtitle: '荒地 · 待开垦',
+			x: 4650,
+			width: 900,
+			height: 28,
+			color: 0xffb79f78,
+			description: '东面滩涂，灶户在此装盐；散落无主盐包(+80银)与漂流木料(+50修复)。黄昏前须全员撤回城内。',
+			interactHint: '[E] 投银开垦盐田，再置办【盐铲】派灶户晒盐。',
+			reclaimable: 'SALT',
+		},
+		EAST_COAST: {
+			id: 'EAST_COAST',
+			name: '东海登陆点',
+			subtitle: '倭寇东面登岸处',
+			x: 7300,
+			width: 300,
+			height: 80,
 			color: 0xff1e4e79,
 			description: '倭寇船只夜袭登岸之所，黑夜降临时倭寇由此涌来。',
 			interactHint: '东海前哨，严防倭寇夜袭。',
@@ -536,7 +615,8 @@ export const GameConfig = {
 			victorySpeech: '「堡墙初立，小股倭探已退。然贼势方炽，速整农桑盐课以备大敌！」',
 			rewardSilver: 90,
 			groups: [
-				{ enemyType: 'SCOUT', count: 5, interval: 1.8, delay: 0.5 },
+				{ enemyType: 'SCOUT', count: 4, interval: 1.8, delay: 0.5 },
+				{ enemyType: 'SCOUT', count: 2, interval: 2.0, delay: 3.0 },
 			],
 		},
 		{

@@ -191,7 +191,7 @@ export class Player {
 		const landmarks = GameConfig.MAP_LANDMARKS;
 		const keys = Object.keys(landmarks) as LandmarkId[];
 		for (const key of keys) {
-			if (key === 'DALUO_MOUNTAIN' || key === 'COAST_SPAWN' || key === 'OUTER_SALT_FLAT') {
+			if (key === 'WEST_COAST' || key === 'EAST_COAST') {
 				continue;
 			}
 			const lm = landmarks[key];

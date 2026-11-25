@@ -44,13 +44,13 @@ GROUPS = [
 ]
 
 EXTRA = [
-    ('盐课司 b03（现为色块）', '`assets/buildings/b03_salt_office.png`，建议 340×300，底边贴地'),
-    ('主城墙 b05（现为色块）', '`assets/buildings/b05_main_wall.png`，建议 360×320，底边贴地'),
-    ('大罗山远景 b09（现为色块）', '`assets/bg/b09_daluo_mountain.png`，建议 320×760，底边贴地'),
-    ('城外盐田与滩涂 b10（现为色块）', '`assets/bg/b10_outer_salt_flat.png`，建议 1120×120'),
-    ('东海海岸 b11（现为色块）', '`assets/bg/b11_coast.png`，建议 520×160'),
+    ('战争迷雾罩（现在是纯色矩形）', '`assets/bg/b09_fog_cloud.png`，建议 400×400 可平铺，墨蓝半透明、边缘虚化'),
+    ('开垦四级（水田 / 盐田）', '`b02_paddy_lv0~lv3.png`、`b10_saltflat_lv0~lv3.png`（lv0 荒地现在用色块）'),
+    ('民居四级', '`b12_house_plot.png`、`b12_house_lv1~lv3.png`（人口由民居添丁）'),
+    ('水门 / 东门加固态', '`b04_inner_water_gate_lv2/lv3.png`、`b06_east_gate_lv2/lv3.png`（Lv1 即现有图）'),
+    ('宗祠 Lv3–Lv5', '`b01_shrine_lv3~lv5.png`（影壁、钟鼓楼、旗杆逐级加）'),
+    ('敌台箭楼 / 佛郎机炮台 Lv3', '`b07_tower_arrow_lv3.png`、`b08_tower_cannon_lv3.png`'),
     ('东门/水门破损态', '`assets/buildings/b06_east_gate_broken.png`、`b04_inner_water_gate_broken.png`（现在用色块表示受损）'),
-    ('宗祠 / 敌台升级态', '`b01_shrine_lv2.png`、`b07_tower_arrow_lv2.png`、`b08_tower_cannon_lv2.png`（现在升级只换色）'),
     ('敌人血条 / 塔耐久条 / 族丁状态条', '`ui/e07_bar_health.png` 已有；建议再补空槽与绿色（劳作）、蓝色（修复）两张'),
     ('底部提示气泡', '`ui/e09_prompt_bubble.png` 已有图，尚未挂到 HUD（现为纯文字）'),
     ('按钮 hover / pressed / disabled', '`ui/e04_btn_hover.png` 等已有图，尚未接状态切换'),
