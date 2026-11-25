@@ -176,7 +176,8 @@ export class Villager {
 			drawRect(this.bodyDraw, -14, 54, 28, 4, 0xff2d3748);
 			drawRect(this.bodyDraw, -14, 54, 28 * pct, 4, 0xff48bb78);
 		}
-		this.roleLabel.text = this.carrying ? '灶户·负盐' : cfg.name.slice(0, 4);
+		this.roleLabel.text = this.carrying ? '灶户·负盐' : cfg.name;
+		this.roleLabel.textWidth = 150; // 不设宽度会被裁成半截字
 		this.roleLabel.color = Color(this.carrying ? 0xfff6e05e : 0xffe2e8f0);
 	}
 
@@ -201,6 +202,11 @@ export class Villager {
 		// 站立帧的命名是 `villager_<role>_NN.png`（不带动作词），移动/劳作才是 `_walk` / `_work`
 		let prefix = name === 'idle' ? base : `${base}_${name}`;
 		let frames = artAnimCount(styleId, prefix);
+		if (frames === 0 && name !== 'walk' && name !== 'work') {
+			// 先退到劳作帧（静止的劳作帧比走路帧安静得多）
+			prefix = `${base}_work`;
+			frames = artAnimCount(styleId, prefix);
+		}
 		if (frames === 0 && name !== 'walk') {
 			// 该动作没有专属帧：退到走路帧，好歹还在动
 			prefix = `${base}_walk`;
@@ -218,7 +224,10 @@ export class Villager {
 		// 动画时钟不走 GAME_SPEED 的减速：否则 6 帧的走路循环会掉到 ~8fps，看起来一颜一颜的
 		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
 		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
-		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
+		// 站立/劳作时把帧锒在各自的一帧上（用 id 错开），而不是从第 0 帧原地踏步
+		const offset = this.id % Math.max(1, frames);
+		const frame = name === 'walk' ? this.animClock * fps + offset : offset;
+		artAnimInto(this.artNode, styleId, prefix, frame);
 	}
 
 	private moveToward(targetX: number, dt: number, speedScale = 1): boolean {

@@ -44,6 +44,8 @@ function drawRect(
  */
 export class DefenseTower {
 	public readonly state: TowerState;
+	/** 玩家是否走到跟前：空位标签只在近处显示 */
+	private nearby = false;
 	public readonly node: Node.Type;
 	private readonly bodyDraw: DrawNode.Type;
 	private readonly projDraw: DrawNode.Type;
@@ -77,15 +79,29 @@ export class DefenseTower {
 		this.refreshVisual();
 	}
 
+	public setNearby(v: boolean): void {
+		if (this.nearby === v) return;
+		this.nearby = v;
+		this.refreshVisual();
+	}
+
 	public refreshVisual(): void {
 		this.bodyDraw.clear();
 		const stats = GameConfig.TOWER_STATS[this.state.type];
 		if (!this.state.unlocked) {
 			artHide(this.artNode);
-			drawRect(this.bodyDraw, -24, 0, 48, 24, 0x664a5568, 0xffa0aec0);
+			// 空位不是一条白条：石砌台基 + 四根标高的木栅，远远看到就知道「这里还能修」
+			drawRect(this.bodyDraw, -30, 0, 60, 10, 0xff6b7280, 0xff1a202c);
+			drawRect(this.bodyDraw, -24, 10, 48, 14, 0xff556170, 0xff1a202c);
+			for (const sx of [-20, -8, 6, 18]) {
+				drawRect(this.bodyDraw, sx, 24, 4, 22, 0xff8b6f47, 0xff3b3026);
+			}
+			drawRect(this.bodyDraw, -22, 44, 44, 5, 0xff8b6f47, 0xff3b3026);
 			this.titleLabel.text = '炮台空位(未修)';
 			this.titleLabel.color = Color(0xffa0aec0);
-			this.titleLabel.y = 38;
+			this.titleLabel.y = 62;
+			// 只有走到跟前才报字，不然一片「炮台空位」挡着城墙
+			this.titleLabel.visible = this.nearby;
 			return;
 		}
 

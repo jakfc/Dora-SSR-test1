@@ -166,18 +166,26 @@ export function GameScene(): Node.Type {
 	}
 
 	// 主战场地面与地标建筑
-	// 地平线以上是陆地（人站的地方），地平线以下整片是水（水里映着上面的城）。
-	const WATER_TOP = GameConfig.GROUND_Y; // 水面线 = 地平线
-	const WATER_BOTTOM = Screen.height + 240; // 水一直画到屏幕外，滚动时不留缝
-	const WATER_H = WATER_BOTTOM - WATER_TOP;
-	const SHORE_Y = WATER_TOP - GameConfig.WATER.SHORE_BAND; // 岸带：水面线往上这一条
+	// 地平线以上是陆地（人站的地方）；地平线以下先露一小条地面断面（岸），
+	// 再往下整片是前景水面，水里映着上面的城。
+	// 【修】水面以前是从地平线往上画的 —— 等于把一层深蓝涂在天空和城区背后
+	// （所以看起来“建筑背后一片纯深蓝”），而且倒影只能挂在泥土层上。
+	// 现在水面线压到地平线以下，水与倒影都在下方，地面断面只剩一条薄岸。
+	const SHORE_H = GameConfig.WATER.SHORE_BAND; // 地面断面高度（走人的那条地）
+	const WATER_TOP = GameConfig.GROUND_Y; // 地平线（人物落脚线）
+	const WATER_LINE = WATER_TOP - SHORE_H; // 前景水面上沿：倒影从这里往下翻
+	const WATER_BOTTOM = -240; // 水一直画到屏幕外，滚动时不留缝
+	const WATER_H = WATER_LINE - WATER_BOTTOM;
+	const WATER_SPAN = WATER_LINE - Math.max(0, WATER_BOTTOM); // 屏幕里看得见的那一段
+	const SHORE_Y = WATER_LINE;
 	const groundDraw = DrawNode();
-	// 岸带：贴着水面的那一条湿沙地
-	drawRect(groundDraw, 0, SHORE_Y, GameConfig.MAP_WIDTH, GameConfig.WATER.SHORE_BAND, 0xff3b3026);
+	// 地面断面：贴着地平线的一大条，下面会被水面盖掉，所以要用实色打底，
+	// 否则贴图接缝处会直接露出空底（就是那个“地底白洞”）。
+	drawRect(groundDraw, 0, SHORE_Y, GameConfig.MAP_WIDTH, SHORE_H, 0xff3b3026);
 	// 两头入海、中间堡城：西岸以西是海，西岸~内城水门是滩涂，
 	// 内城水门~东门之间是堡内石板路，东门~东岸又是滩涂，东岸以东复为海。
-	drawRect(groundDraw, 0, SHORE_Y, westSeaEnd, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
-	drawRect(groundDraw, eastSeaStart, SHORE_Y, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
+	drawRect(groundDraw, 0, SHORE_Y, westSeaEnd, SHORE_H, 0xff1e4e79);
+	drawRect(groundDraw, eastSeaStart, SHORE_Y, GameConfig.MAP_WIDTH - eastSeaStart, SHORE_H, 0xff1e4e79);
 	drawRect(groundDraw, westSeaEnd, GameConfig.GROUND_Y - 14, cityMinX - westSeaEnd, 14, 0xffb79f78);
 	drawRect(groundDraw, cityMaxX, GameConfig.GROUND_Y - 14, eastSeaStart - cityMaxX, 14, 0xffb79f78);
 	drawRect(groundDraw, cityMinX, GameConfig.GROUND_Y - 14, cityMaxX - cityMinX, 14, 0xff718096);
@@ -185,6 +193,10 @@ export function GameScene(): Node.Type {
 
 	// 地面 / 滩涂贴图：横向平铺（有素材时盖住程序化地面）
 	// 同一张 640 宽的图铺满 7600 像素的地图，一眼就能看出「一格一格」。
+	// 主角脚下标记环（放在村民之后，不会被别人遮住）
+	const playerMarkDraw = DrawNode();
+	worldLayer.addChild(playerMarkDraw);
+
 	// 三招打散重复感：① 有变体图就轮换；② 隔块水平镜像；③ 每块 ±2 像素微抖。
 	// 最后再撒一层地物碎屑（石块/草簇/贝壳），把等距的节拍彻底打乱。
 	const groundArtNode = Node();
@@ -196,7 +208,7 @@ export function GameScene(): Node.Type {
 		const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
 		return v - Math.floor(v);
 	};
-	if (artAt(groundArtNode, 'ground_beach', westSeaEnd, 0) !== undefined) {
+	if (artReady('ground_beach')) {
 		const variantOf = (base: string, list: string[], seed: number): string => {
 			const pick = list[Math.floor(groundRand(seed) * list.length)];
 			return pick !== undefined && artReady(pick) ? pick : base;
@@ -211,7 +223,9 @@ export function GameScene(): Node.Type {
 					groundArtNode,
 					id,
 					x,
-					GameConfig.GROUND_Y - GROUND_TILE_ART_H + groundRand(tileIndex * 9.1) * 3
+					// 贴图顶边贴地平线，下面一大截由前景水面盖掉。
+					// 不要加 y 抖动：一晃就会在相邻两块的接缝上露出底色，看着像个“白洞”。
+					GameConfig.GROUND_Y - GROUND_TILE_ART_H
 				);
 				// 镜像要连带把 x 挪回一格：这类贴图 ax=0（贴左），翻转后内容会跑到左边去
 				if (node !== undefined && groundRand(tileIndex * 5.3) < 0.5) {
@@ -229,8 +243,8 @@ export function GameScene(): Node.Type {
 		groundDraw.clear();
 		// 两头海面重新盖回（铺贴图时不能让滩涂越界到海里）
 		const seaDraw = DrawNode();
-		drawRect(seaDraw, 0, SHORE_Y, westSeaEnd, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
-		drawRect(seaDraw, eastSeaStart, SHORE_Y, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
+		drawRect(seaDraw, 0, SHORE_Y, westSeaEnd, SHORE_H, 0xff1e4e79);
+		drawRect(seaDraw, eastSeaStart, SHORE_Y, GameConfig.MAP_WIDTH - eastSeaStart, SHORE_H, 0xff1e4e79);
 		worldLayer.addChild(seaDraw);
 
 		// 地物碎屑层：按种子撒在滩涂与堡内地面上，压掉贴图的等距节拍
@@ -296,7 +310,8 @@ export function GameScene(): Node.Type {
 				(Math.min(255, g) << 8) |
 				Math.min(255, b);
 			const hStep = WATER_H / steps + 1;
-			drawRect(waterDraw, left, WATER_TOP + (WATER_H * i) / steps, width, hStep, col);
+			// 从水面线往下铺：i=0 贴水面（最亮），越往下越深
+			drawRect(waterDraw, left, WATER_LINE - (WATER_H * (i + 1)) / steps, width, hStep, col);
 		}
 	};
 
@@ -310,7 +325,7 @@ export function GameScene(): Node.Type {
 		const n = GameConfig.WATER.RIPPLE_COUNT;
 		for (let i = 0; i < n; i++) {
 			const seed = groundRand(i * 3.3 + 1.1);
-			const y = WATER_TOP + 4 + seed * (WATER_H - 12);
+			const y = WATER_LINE - 5 - seed * (WATER_SPAN - 14);
 			const len = width * (0.14 + groundRand(i * 7.7) * 0.42);
 			const speed = 5 + groundRand(i * 2.1) * 8;
 			const drift = ((waterClock * speed + seed * 1000) % (width + 320)) - 160;
@@ -321,8 +336,8 @@ export function GameScene(): Node.Type {
 		}
 		// 水岸亮边：贴着地平线的一条浅水反光，随水波轻微呼吸
 		const shoreA = 0x30 + Math.floor((Math.sin(waterClock * 1.2) * 0.5 + 0.5) * 0x26);
-		drawRect(rippleDraw, left, WATER_TOP + 1, width, 2, (shoreA << 24) | 0xffffff);
-		drawRect(rippleDraw, left, WATER_TOP + 3, width, 1, (Math.floor(shoreA * 0.6) << 24) | 0xcfe8ff);
+		drawRect(rippleDraw, left, WATER_LINE - 2, width, 2, (shoreA << 24) | 0xffffff);
+		drawRect(rippleDraw, left, WATER_LINE - 4, width, 1, (Math.floor(shoreA * 0.6) << 24) | 0xcfe8ff);
 		// 碎光：位置/周期各不相同，淡入淡出地闪
 		glintDraw.clear();
 		const gn = GameConfig.WATER.GLINT_COUNT;
@@ -334,7 +349,7 @@ export function GameScene(): Node.Type {
 			const fade = Math.sin((t / 0.36) * Math.PI);
 			const gx =
 				left + 40 + groundRand(i * 2.3) * (width - 80) + Math.sin(waterClock * 0.6 + i) * 9;
-			const gy = WATER_TOP + 6 + groundRand(i * 4.9) * (WATER_H - 16);
+			const gy = WATER_LINE - 8 - groundRand(i * 4.9) * (WATER_SPAN - 18);
 			const gw = 4 + Math.floor(groundRand(i * 6.1) * 9);
 			const ga = Math.floor(0x30 + fade * 0x82);
 			drawRect(glintDraw, gx, gy, gw, 3, (ga << 24) | 0xf2f8ff);
@@ -357,8 +372,9 @@ export function GameScene(): Node.Type {
 		const n = Node();
 		n.tag = 'refl';
 		mirrorNodes.push(n);
-		// 源挂点原点在地平线上，倒影要从水面线往下翻，所以往下让出一格岸带
-		n.y = 0; // 镜像原点压在水面线上：倒影从水面往下翻
+		// 源挂点原点在地平线上，水面线在地平线以下一格岸带：
+		// 倒影从水面线往下翻，不会叠到上面那条地面断面上。
+		n.y = -SHORE_H;
 		n.scaleY = -GameConfig.WATER.REFLECT_SQUASH;
 		n.opacity = GameConfig.WATER.REFLECT_OPACITY;
 		parent.addChild(n);
@@ -602,6 +618,10 @@ export function GameScene(): Node.Type {
 			drawRect(fogDraw, z.x, 0, z.width, FOG_TOP, 0xdd0b1220);
 		}
 	};
+	// 初始就点亮西滩到宗祠这一段：不然西边的敌台糊在雾里，开局就看不到自家防线
+	for (const z of GameConfig.FOG_ZONES) {
+		if (z.x <= GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x) gs.revealZone(z.id);
+	}
 	refreshFogVisuals();
 
 	/** 主角行至未探明地界边线即揭开迷雾（其余族丁走进去不算，雾里也看得见他们） */
@@ -1756,6 +1776,17 @@ export function GameScene(): Node.Type {
 		if (Keyboard.isKeyDown(KeyName.F)) bribeNearestEnemy();
 
 		const nearestLandmark = player.update(clampedDt, moveInput);
+		// 主角脚下标记：镜头拉近、人一多，一眼就能认出王叔杲
+		playerMarkDraw.clear();
+		const markPulse = 0.5 + Math.sin(waterClock * 2.4) * 0.5;
+		playerMarkDraw.drawEllipse(
+			Vec2(player.x, GameConfig.GROUND_Y + 1),
+			30 + markPulse * 5,
+			9 + markPulse * 3,
+			Color(0x55f6e05e)
+		);
+		drawRect(playerMarkDraw, player.x - 13, GameConfig.GROUND_Y - 1, 26, 2, 0x88f6e05e);
+		for (const t of towers) t.setNearby(Math.abs(t.state.x - player.x) < 300);
 
 		// 探路：只有主角王叔杲亲自走到未探明地界才算「探明」（族丁不算，但他们仍能从雾里被看见）
 		revealFogAround([player.x]);

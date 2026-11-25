@@ -27,7 +27,7 @@ export class Screen {
 	 * 1.85 = 当前手感：可视世界约 1280/1.85 ≈ 690 单位宽，
 	 *        人物和屋舍看得清，水田/盐田也正好摆在画面里而不显空旷。
 	 */
-	public static readonly WORLD_ZOOM = 1.85;
+	public static readonly WORLD_ZOOM = 1.25;
 
 	private static camZoom = 1;
 	private static uiZoom = 1;
@@ -66,15 +66,15 @@ export class Screen {
 
 	/**
 	 * UI 单位 → 世界单位。
-	 * HUD 被 attachUi 缩小了 1/WORLD_ZOOM，所以它的 70/80 单位在世界上只有 70/80 ÷ WORLD_ZOOM。
+	 * HUD 节点被 attachUi 缩到 uiZoom/camZoom，所以它 1 个设计单位在世界上只有这么多。
 	 */
 	public static uiToWorld(uiUnits: number): number {
-		return uiUnits / Screen.WORLD_ZOOM;
+		return (uiUnits * Screen.uiZoom) / Screen.camZoom;
 	}
 
 	/** 世界单位 → UI 单位。 */
 	public static worldToUi(worldUnits: number): number {
-		return worldUnits * Screen.WORLD_ZOOM;
+		return (worldUnits * Screen.camZoom) / Screen.uiZoom;
 	}
 
 	/** UI 空间宽度（设计单位，等价于改动前的 Screen.width） */
@@ -102,7 +102,8 @@ export class Screen {
 	 * HUD / 标题 / 结算界面的根节点都要调用一次。
 	 */
 	public static attachUi(node: Node.Type): void {
-		const s = 1 / Screen.WORLD_ZOOM;
+		// 摄像机放了 camZoom 倍，UI 要缩回去：uiZoom/camZoom 正好让 1 单位 = 1 设计单位
+		const s = Screen.camZoom > 0 ? Screen.uiZoom / Screen.camZoom : 1;
 		node.scaleX = s;
 		node.scaleY = s;
 	}
@@ -121,7 +122,15 @@ export class Screen {
 		const safeFit = fit > 0 ? fit : 1;
 
 		Screen.uiZoom = safeFit;
-		Screen.camZoom = safeFit * Screen.WORLD_ZOOM;
+		// 镜头缩放：【修】以「世界视野高度」为准，而不是简单乘 WORLD_ZOOM。
+		// 超宽屏（如 3440x1369）以前会把世界视野挤到 389 高 ——
+		// 构图全挤在中间一条窄带里，地下泥土层占掉屏幕快一半。
+		// 现在锁定目标视野高度（CAMERA_VIEW_HEIGHT / WORLD_ZOOM，约 416 单位），
+		// 再给一个最小可见宽度（窄窗口时改按宽度装），宽出来的部分就多看两边。
+		const targetH = Math.max(240, GameConfig.CAMERA_VIEW_HEIGHT / Screen.WORLD_ZOOM);
+		const zoomH = pixelH / targetH;
+		const zoomW = pixelW / Math.max(480, GameConfig.CAMERA_VIEW_WIDTH * 0.9);
+		Screen.camZoom = Math.min(zoomH, zoomW);
 
 		const camera = tolua.cast(Director.currentCamera, TypeName.Camera2D);
 		if (camera !== undefined) {

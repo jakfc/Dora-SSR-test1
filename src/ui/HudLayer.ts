@@ -148,6 +148,7 @@ export class HudLayer {
 	private bossWidth = 600;
 
 	// 营建/招募读秒面板与黄昏未归警报
+	private readonly leftPanel: DrawNode.Type;
 	private readonly workLabel: Label.Type;
 	private readonly alertLabel: Label.Type;
 	private alertPulse = 0;
@@ -163,6 +164,10 @@ export class HudLayer {
 		// 顶栏背景（e01 贴图优先，缺素材则用方块）
 		this.topBg = DrawNode();
 		this.node.addChild(this.topBg);
+
+		// 左侧信息/提示的半透明底板：字压在建筑和倒影上也能看清（文字重叠的治本办法）
+		this.leftPanel = DrawNode();
+		this.node.addChild(this.leftPanel);
 
 		this.topBarArt = artStretch('ui_top_bar', Screen.uiWidth, TOP_BAR_HEIGHT);
 		if (this.topBarArt !== undefined) {
@@ -431,13 +436,20 @@ export class HudLayer {
 		this.popLabel.y = rowY;
 
 		this.skipDayBtn.x = w - 130;
-		this.skipDayBtn.y = h - 50;
+		// 提前入夜挪进顶栏里：以前贴在 h-50（顶栏下面），正好压住建筑名
+		this.skipDayBtn.y = h - 32;
 
 		this.toastLabel.x = w / 2;
 		this.toastLabel.y = h - 102;
 
 		this.workLabel.x = 20;
 		this.workLabel.y = h - TOP_BAR_HEIGHT - 56;
+		// 左侧信息栏底板：包住读秒 / 交互提示 / 按键说明三行
+		this.leftPanel.clear();
+		const panelTop = h - TOP_BAR_HEIGHT - 8;
+		const panelBottom = h - TOP_BAR_HEIGHT - 140;
+		drawRect(this.leftPanel, 8, panelBottom, 420, panelTop - panelBottom, 0x8f0d1620);
+		drawRect(this.leftPanel, 8, panelBottom, 3, panelTop - panelBottom, 0xff4a5568);
 		this.alertLabel.x = w / 2;
 		this.alertLabel.y = h - 132;
 		this.alertLabel.textWidth = w - 80;
@@ -478,6 +490,10 @@ export class HudLayer {
 			skillBtn.x = w - 20 - btnW;
 			skillBtn.y = skillY;
 			skillY -= 38 + skillGap;
+			// 右侧竖排压太多画幅：缩到 0.86、半透明，需要时才看清
+			skillBtn.scaleX = 0.86;
+			skillBtn.scaleY = 0.86;
+			skillBtn.opacity = 0.88;
 		}
 
 		this.extraActionNode.x = 20;
