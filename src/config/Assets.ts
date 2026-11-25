@@ -324,19 +324,31 @@ export function artSize(id: string): Size.Type | undefined {
  * 刷新一个「美术挂点」节点：按 id 放入精灵（同一 id 会复用，不重复创建）。
  * @returns 精灵实例；素材缺失时返回 undefined —— 调用方应回退到程序化绘制。
  */
-export function artInto(holder: Node.Type, id: string): Sprite.Type | undefined {
+export function artInto(holder: Node.Type, id: string, mirror?: Node.Type): Sprite.Type | undefined {
 	if (holder.tag !== id) {
-		holder.removeAllChildren();
+		// 只换掉贴图本体，别把挂点下其它东西（水面倒影挂点）一起清掉
+		const old = holder.getChildByTag('art');
+		if (old !== undefined) old.removeFromParent();
 		holder.tag = id;
 		const sprite = artSprite(id);
 		if (sprite === undefined) {
 			holder.tag = '';
 			holder.visible = false;
+			if (mirror !== undefined) mirror.removeAllChildren();
 			return undefined;
 		}
 		sprite.tag = 'art';
 		holder.addChild(sprite);
 		holder.visible = true;
+		// 水面倒影：同一张图再挂一份到镜像挂点上（镜像挂点自己已上下翻转）
+		if (mirror !== undefined) {
+			mirror.removeAllChildren();
+			const m = artSprite(id);
+			if (m !== undefined) {
+				m.tag = 'art';
+				mirror.addChild(m);
+			}
+		}
 	}
 	return holder.getChildByTag('art') as Sprite.Type | undefined;
 }
@@ -472,10 +484,13 @@ export function artAnimInto(
 	holder: Node.Type,
 	styleId: string,
 	prefix: string,
-	frame: number
+	frame: number,
+	mirror?: Node.Type
 ): Sprite.Type | undefined {
 	const spec = specOf(styleId);
 	const frames = spec !== undefined ? artAnimFrames(styleId, prefix) : [];
+	// 倒影挂点用同一套帧：递归跑一次，镜像挂点自己负责上下翻
+	if (mirror !== undefined) artAnimInto(mirror, styleId, prefix, frame);
 	const n = frames.length;
 	// 标签带帧数：帧序列变化（美术补图/换前缀）时自动重建
 	const tag = `anim|${styleId}|${prefix}|${n}`;

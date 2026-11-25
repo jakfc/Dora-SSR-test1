@@ -101,7 +101,9 @@ export interface HudExtraInfo {
 }
 
 const TOP_BAR_HEIGHT = 64;
-const BOTTOM_BAR_HEIGHT = 76;
+// 底栏已取消：地平线以下是城前水面，底栏会把整条倒影盖住。
+// 想找回底栏把这里改回 76 即可（技能键会自动回到底部横排）。
+const BOTTOM_BAR_HEIGHT = 0;
 
 /**
  * 战斗 HUD 层：顶栏资源面板、底部操作条、地标快捷按钮、战报弹窗。
@@ -235,7 +237,8 @@ export class HudLayer {
 		this.bottomBg = DrawNode();
 		this.node.addChild(this.bottomBg);
 
-		this.bottomBarArt = artStretch('ui_bottom_bar', Screen.uiWidth, BOTTOM_BAR_HEIGHT);
+		this.bottomBarArt =
+			BOTTOM_BAR_HEIGHT > 0 ? artStretch('ui_bottom_bar', Screen.uiWidth, BOTTOM_BAR_HEIGHT) : undefined;
 		if (this.bottomBarArt !== undefined) {
 			this.bottomBarArt.anchor = Vec2(0, 0);
 			this.bottomBarArt.size = Size(Screen.uiWidth, BOTTOM_BAR_HEIGHT);
@@ -434,7 +437,7 @@ export class HudLayer {
 		this.toastLabel.y = h - 102;
 
 		this.workLabel.x = 20;
-		this.workLabel.y = h - TOP_BAR_HEIGHT - 16;
+		this.workLabel.y = h - TOP_BAR_HEIGHT - 56;
 		this.alertLabel.x = w / 2;
 		this.alertLabel.y = h - 132;
 		this.alertLabel.textWidth = w - 80;
@@ -449,12 +452,13 @@ export class HudLayer {
 		}
 
 		this.hintLabel.x = 20;
-		this.hintLabel.y = 48;
+		this.hintLabel.y = h - TOP_BAR_HEIGHT - 92;
 		this.hintIconNode.x = 16;
-		this.hintIconNode.y = 48;
+		this.hintIconNode.y = h - TOP_BAR_HEIGHT - 92;
 		if (this.hintIconNode.visible) this.hintLabel.x = 48;
+		// 底栏没了，按键提示也不能压在水面上：跟左边一列信息排在一起
 		this.controlsLabel.x = 20;
-		this.controlsLabel.y = 20;
+		this.controlsLabel.y = h - TOP_BAR_HEIGHT - 124;
 
 		// BOSS 血条：随窗口宽度自适应，居中贴在顶栏下方
 		this.bossWidth = Math.min(600, w - 240);
@@ -465,20 +469,19 @@ export class HudLayer {
 			this.bossBgArt.x = -this.bossWidth / 2;
 		}
 
-		// 技能键从右边缘往左排（4 个按钮也要完整落在屏幕内）
-		const skillGap = 12;
-		const skillRight = w - 20;
-		let skillCursor = skillRight;
-		for (let i = this.skillButtons.length - 1; i >= 0; i--) {
+		// 底栏取消后，技能键改到右上角竖排，下方整条水面留空给倒影
+		const skillGap = 8;
+		let skillY = h - TOP_BAR_HEIGHT - 12 - 38;
+		for (let i = 0; i < this.skillButtons.length; i++) {
 			const skillBtn = this.skillButtons[i];
 			const btnW = skillBtn.size.width > 0 ? skillBtn.size.width : 92;
-			skillBtn.x = skillCursor - btnW;
-			skillBtn.y = 18;
-			skillCursor -= btnW + skillGap;
+			skillBtn.x = w - 20 - btnW;
+			skillBtn.y = skillY;
+			skillY -= 38 + skillGap;
 		}
 
 		this.extraActionNode.x = 20;
-		this.extraActionNode.y = 86;
+		this.extraActionNode.y = h - TOP_BAR_HEIGHT - 12;
 
 		// 胜利战报弹窗
 		const boxW = Math.min(700, w - 60);

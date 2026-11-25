@@ -166,12 +166,15 @@ export function GameScene(): Node.Type {
 	}
 
 	// 主战场地面与地标建筑
+	// 地平线以下不再是一条厚土块：往下只留一条岸带，再往下全是水（水里映着上面的城）。
+	const WATER_TOP = GameConfig.GROUND_Y - GameConfig.WATER.SHORE_BAND;
 	const groundDraw = DrawNode();
-	drawRect(groundDraw, 0, 0, GameConfig.MAP_WIDTH, GameConfig.GROUND_Y, 0xff3b3026);
+	// 岸带：地平线往下 SHORE_BAND 这一条
+	drawRect(groundDraw, 0, WATER_TOP, GameConfig.MAP_WIDTH, GameConfig.WATER.SHORE_BAND, 0xff3b3026);
 	// 两头入海、中间堡城：西岸以西是海，西岸~内城水门是滩涂，
 	// 内城水门~东门之间是堡内石板路，东门~东岸又是滩涂，东岸以东复为海。
-	drawRect(groundDraw, 0, 0, westSeaEnd, GameConfig.GROUND_Y, 0xff1e4e79);
-	drawRect(groundDraw, eastSeaStart, 0, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.GROUND_Y, 0xff1e4e79);
+	drawRect(groundDraw, 0, WATER_TOP, westSeaEnd, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
+	drawRect(groundDraw, eastSeaStart, WATER_TOP, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
 	drawRect(groundDraw, westSeaEnd, GameConfig.GROUND_Y - 14, cityMinX - westSeaEnd, 14, 0xffb79f78);
 	drawRect(groundDraw, cityMaxX, GameConfig.GROUND_Y - 14, eastSeaStart - cityMaxX, 14, 0xffb79f78);
 	drawRect(groundDraw, cityMinX, GameConfig.GROUND_Y - 14, cityMaxX - cityMinX, 14, 0xff718096);
@@ -184,6 +187,7 @@ export function GameScene(): Node.Type {
 	const groundArtNode = Node();
 	worldLayer.addChild(groundArtNode);
 	const GROUND_TILE = 640;
+	const GROUND_TILE_ART_H = 160; // 地面贴图原生高度；底部那一截会被水面盖掉
 	// 固定种子伪随机：同一局每次重绘结果一致（不会闪），但相邻两块取法不同
 	const groundRand = (n: number): number => {
 		const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -199,7 +203,13 @@ export function GameScene(): Node.Type {
 			for (let x = from; x < to; x += GROUND_TILE) {
 				const id = variantOf(base, variants, tileIndex * 3.7);
 				// 微抖只往上抖（ay=0 贴底：y 为负会在贴图下沿露出空隙），同时错开接缝
-				const node = artAt(groundArtNode, id, x, groundRand(tileIndex * 9.1) * 3);
+				// 贴图底边压到地平线以下：下面那一截由水面盖掉
+				const node = artAt(
+					groundArtNode,
+					id,
+					x,
+					GameConfig.GROUND_Y - GROUND_TILE_ART_H + groundRand(tileIndex * 9.1) * 3
+				);
 				// 镜像要连带把 x 挪回一格：这类贴图 ax=0（贴左），翻转后内容会跑到左边去
 				if (node !== undefined && groundRand(tileIndex * 5.3) < 0.5) {
 					node.scaleX = -1;
@@ -216,8 +226,8 @@ export function GameScene(): Node.Type {
 		groundDraw.clear();
 		// 两头海面重新盖回（铺贴图时不能让滩涂越界到海里）
 		const seaDraw = DrawNode();
-		drawRect(seaDraw, 0, 0, westSeaEnd, GameConfig.GROUND_Y, 0xff1e4e79);
-		drawRect(seaDraw, eastSeaStart, 0, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.GROUND_Y, 0xff1e4e79);
+		drawRect(seaDraw, 0, WATER_TOP, westSeaEnd, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
+		drawRect(seaDraw, eastSeaStart, WATER_TOP, GameConfig.MAP_WIDTH - eastSeaStart, GameConfig.WATER.SHORE_BAND, 0xff1e4e79);
 		worldLayer.addChild(seaDraw);
 
 		// 地物碎屑层：按种子撒在滩涂与堡内地面上，压掉贴图的等距节拍
@@ -237,7 +247,8 @@ export function GameScene(): Node.Type {
 				const dx = 40 + groundRand(i * 1.7) * (GameConfig.MAP_WIDTH - 80);
 				if (dx < westSeaEnd || dx > eastSeaStart) continue;
 				// 只贴在地平线附近，别飘到天上去
-				const dy = GameConfig.GROUND_Y - 4 - groundRand(i * 2.9) * 52;
+				// 只贴在地平线往上这一小片岸带上（再往下就是水面了）
+				const dy = GameConfig.GROUND_Y - 3 - groundRand(i * 2.9) * 18;
 				const pick = decalIds[Math.floor(groundRand(i * 3.3) * decalIds.length)];
 				const node = pick !== undefined ? artAt(decalNode, pick, dx, dy) : undefined;
 				if (node === undefined) continue;
@@ -248,6 +259,67 @@ export function GameScene(): Node.Type {
 			}
 		}
 	}
+
+	// ---- 城前水面：地平线以下全是水，水里映着上面的城 ----
+	// 只画可视区域那一段（横跨整张地图的渐变会很浪费）
+	const waterDraw = DrawNode();
+	worldLayer.addChild(waterDraw);
+	const rippleDraw = DrawNode();
+	worldLayer.addChild(rippleDraw);
+	let waterClock = 0;
+
+	/** 水位渐变：贴地平线处亮（远水反天光），越靠画面底部越深 */
+	const paintWater = (left: number, width: number) => {
+		waterDraw.clear();
+		const deep = GameConfig.WATER.COLOR_DEEP;
+		const top = GameConfig.WATER.COLOR_TOP;
+		const steps = 10;
+		for (let i = 0; i < steps; i++) {
+			const t = i / (steps - 1);
+			const r = Math.floor(((deep >>> 16) & 0xff) * (1 - t) + ((top >>> 16) & 0xff) * t);
+			const g = Math.floor(((deep >>> 8) & 0xff) * (1 - t) + ((top >>> 8) & 0xff) * t);
+			const b = Math.floor((deep & 0xff) * (1 - t) + (top & 0xff) * t);
+			const col = 0xff000000 | (r << 16) | (g << 8) | b;
+			const hStep = WATER_TOP / steps + 1;
+			drawRect(waterDraw, left, (WATER_TOP * i) / steps, width, hStep, col);
+		}
+	};
+
+	/** 波纹：几道横贯水面的亮线，跟着镜头只画可视区，缓慢漂移 */
+	const tickWater = (dt: number) => {
+		waterClock += dt;
+		const left = cameraX - Screen.width / 2 - 60;
+		const width = Screen.width + 120;
+		paintWater(left, width);
+		rippleDraw.clear();
+		const n = GameConfig.WATER.RIPPLE_COUNT;
+		for (let i = 0; i < n; i++) {
+			const seed = groundRand(i * 3.3 + 1.1);
+			const y = 3 + seed * (WATER_TOP - 9);
+			const len = width * (0.14 + groundRand(i * 7.7) * 0.42);
+			const speed = 5 + groundRand(i * 2.1) * 8;
+			const drift = ((waterClock * speed + seed * 1000) % (width + 320)) - 160;
+			const alpha = 0x18 + Math.floor(groundRand(i * 5.5) * 0x20);
+			drawRect(rippleDraw, left + drift, y, len, 2, (alpha << 24) | 0xdfefff);
+		}
+	};
+
+	/**
+	 * 倒影挂点：挂在源挂点底下，绕水面线上下翻一格。
+	 * 因为是子节点，源挂点一动倒影自动跟着跑，不需要每帧同步坐标。
+	 */
+	const reflectOf = (parent: Node.Type): Node.Type => {
+		const found = parent.getChildByTag('refl');
+		if (found !== undefined) return found;
+		const n = Node();
+		n.tag = 'refl';
+		// 源挂点原点在地平线上，倒影要从水面线往下翻，所以往下让出一格岸带
+		n.y = -GameConfig.WATER.SHORE_BAND;
+		n.scaleY = -GameConfig.WATER.REFLECT_SQUASH;
+		n.opacity = GameConfig.WATER.REFLECT_OPACITY;
+		parent.addChild(n);
+		return n;
+	};
 
 	// 绘制静态地标（宗祠、水田、盐课司、主城墙、东西滩头）
 	// 每级一块模型：升级后换的是「另一座楼」，不是同一个方块改数字。
@@ -307,7 +379,7 @@ export function GameScene(): Node.Type {
 			const holder = landmarkArtNodes[id];
 			if (holder === undefined) continue;
 			const lm = GameConfig.MAP_LANDMARKS[id];
-			if (artInto(holder, landmarkArtId(id)) === undefined) {
+			if (artInto(holder, landmarkArtId(id), reflectOf(holder)) === undefined) {
 				drawRect(
 					landmarkDraw,
 					lm.x - lm.width / 2,
@@ -344,7 +416,7 @@ export function GameScene(): Node.Type {
 			node.x = h.x;
 			node.y = GameConfig.GROUND_Y;
 			const artId = h.level <= 0 ? 'lm_house_plot' : `lm_house_lv${h.level}`;
-			if (artInto(node, artId) !== undefined) continue; // 有贴图就不用画色块
+			if (artInto(node, artId, reflectOf(node)) !== undefined) continue; // 有贴图就不用画色块
 			if (h.level <= 0) {
 				// 空地：只画一圈地基，等玩家投银起造
 				drawRect(houseDraw, h.x - 40, GameConfig.GROUND_Y - 3, 80, 6, 0xff3b4a59, 0xffe2e8f0);
@@ -695,7 +767,7 @@ export function GameScene(): Node.Type {
 		shrineArtNode.x = hallLm.x;
 		shrineArtNode.y = GameConfig.GROUND_Y;
 		const hallArtId = landmarkArtId('ANCESTRAL_HALL');
-		if (artInto(shrineArtNode, hallArtId) === undefined) {
+		if (artInto(shrineArtNode, hallArtId, reflectOf(shrineArtNode)) === undefined) {
 			drawRect(
 				gatesDraw,
 				hallLm.x - hallLm.width / 2,
@@ -712,7 +784,7 @@ export function GameScene(): Node.Type {
 		innerGateArtNode.x = innerLm.x;
 		innerGateArtNode.y = GameConfig.GROUND_Y;
 		if (gs.innerGateHp > 0) {
-			if (artInto(innerGateArtNode, landmarkArtId('INNER_GATE')) === undefined) {
+			if (artInto(innerGateArtNode, landmarkArtId('INNER_GATE'), reflectOf(innerGateArtNode)) === undefined) {
 				drawRect(
 					gatesDraw,
 					innerLm.x - innerLm.width / 2,
@@ -723,7 +795,7 @@ export function GameScene(): Node.Type {
 					0xffe2e8f0
 				);
 			}
-		} else if (artInto(innerGateArtNode, 'lm_INNER_GATE_broken') === undefined) {
+		} else if (artInto(innerGateArtNode, 'lm_INNER_GATE_broken', reflectOf(innerGateArtNode)) === undefined) {
 			drawRect(
 				gatesDraw,
 				innerLm.x - innerLm.width / 2,
@@ -739,7 +811,7 @@ export function GameScene(): Node.Type {
 		gateArtNode.x = eastLm.x;
 		gateArtNode.y = GameConfig.GROUND_Y;
 		if (gs.eastGateHp <= 0) {
-			if (artInto(gateArtNode, 'lm_EAST_GATE_broken') === undefined) {
+			if (artInto(gateArtNode, 'lm_EAST_GATE_broken', reflectOf(gateArtNode)) === undefined) {
 				drawRect(
 					gatesDraw,
 					eastLm.x - eastLm.width / 2,
@@ -749,7 +821,7 @@ export function GameScene(): Node.Type {
 					0xff2d3748
 				);
 			}
-		} else if (artInto(gateArtNode, landmarkArtId('EAST_GATE')) === undefined) {
+		} else if (artInto(gateArtNode, landmarkArtId('EAST_GATE'), reflectOf(gateArtNode)) === undefined) {
 			drawRect(
 				gatesDraw,
 				eastLm.x - eastLm.width / 2,
@@ -1600,6 +1672,7 @@ export function GameScene(): Node.Type {
 		// 日夜循环 / 动画会一起放慢，手感一致。
 		const clampedDt = Math.min(dt, 0.05) * GameConfig.GAME_SPEED;
 		tickFx(clampedDt);
+		tickWater(clampedDt);
 		// 城门铁闸：帧级缓动升降（闸门作为独立杆件滑进气槽，不再换图不硬跳）
 		tickGate(dt);
 
