@@ -42,3 +42,5 @@ tools/__pycache__/
 
 # 运行时自检探针：手写的 lua（不是编译产物），要随自检脚本一起入库
 !tools/_probe_*.lua
+!tools/dump_scene.lua
+!tools/probe_keys.lua
