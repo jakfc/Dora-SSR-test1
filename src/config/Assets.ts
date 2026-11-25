@@ -210,14 +210,19 @@ function fitOf(spec: ArtSpec, texW: number, texH: number): Fit {
 export function artSprite(id: string, applySize = true): Sprite.Type | undefined {
 	const spec = specOf(id);
 	if (spec === undefined) return undefined;
-	const dim = Texture2D(spec.path);
+	return artSpriteFromPath(spec.path, spec, applySize);
+}
+
+/** 按具体路径 + 尺寸规范造精灵（动画帧复用此函数）。 */
+function artSpriteFromPath(path: string, spec: ArtSpec, applySize = true): Sprite.Type | undefined {
+	const dim = Texture2D(path);
 	if (dim === undefined || dim.width <= 0 || dim.height <= 0) {
-		missingPaths[spec.path] = true;
+		missingPaths[path] = true;
 		return undefined;
 	}
 	const sprite = Sprite(dim);
 	if (sprite === undefined) {
-		missingPaths[spec.path] = true;
+		missingPaths[path] = true;
 		return undefined;
 	}
 	const fit = fitOf(spec, dim.width, dim.height);
@@ -301,3 +306,137 @@ export function artStretch(id: string, w: number, h: number): Sprite.Type | unde
 	sprite.size = Size(w, h);
 	return sprite;
 }
+
+/**
+ * ============================================================
+ *  逐帧动画（D 组素材）
+ * ============================================================
+ *
+ * 帧文件命名约定：`<prefix>_01.png`、`<prefix>_02.png` …… 从 1 连续编号，
+ * 与同角色的静态单帧放在同一目录。动画前缀与角色静态 id 的对应关系：
+ *   - 族丁： `villager_<小写职业>`（静止）、`_walk`、`_work`、`_attack`
+ *   - 倭寇： `enemy_<小写类型>`（静止）、`_walk`、`_attack`、`_fall`
+ *   - 王叔杲：`player_idle`、`player_walk`、`player_attack`、`player_qilin`、`player_hurt`
+ *
+ * 帧图缺失时自动退化：动画前缀没图就退回该角色的静态 id，静态 id 也没图
+ * 才退回程序化方块。所以美术只要按命名把帧图丢进同目录，动画立刻生效。
+ */
+
+/** 单个前缀最多探测多少帧，防止写错编号时无限探测。 */
+const ANIM_MAX_FRAMES = 12;
+
+/** 临时动画调试开关。 */
+const DEBUG_ANIM = false;
+
+/** 「样式 id + 前缀」→ 已探测到的帧路径（缓存，避免每帧扫盘）。 */
+const animFrameCache: Record<string, string[]> = {};
+
+/** 取样式 id 所在目录，用于把动画前缀拼成同目录下的帧路径。 */
+function dirOfSpec(spec: ArtSpec): string {
+	// 注：Dora 的 TS 运行时不支持 String.lastIndexOf，改用 indexOf 循环。
+	let last = -1;
+	let idx = spec.path.indexOf('/');
+	while (idx >= 0) {
+		last = idx;
+		idx = spec.path.indexOf('/', last + 1);
+	}
+	return last >= 0 ? spec.path.substring(0, last + 1) : '';
+}
+
+/** 探测某动画前缀的帧序列；无可用帧时返回空数组。 */
+export function artAnimFrames(styleId: string, prefix: string): string[] {
+	const key = `${styleId}|${prefix}`;
+	const hit = animFrameCache[key];
+	if (hit !== undefined) return hit;
+	const out: string[] = [];
+	const spec = specOf(styleId);
+	if (spec !== undefined) {
+		const dir = dirOfSpec(spec);
+		for (let i = 1; i <= ANIM_MAX_FRAMES; i++) {
+			const path = `${dir}${prefix}_${i < 10 ? '0' : ''}${i}.png`;
+			if (missingPaths[path] === true || Texture2D(path) === undefined) {
+				missingPaths[path] = true;
+				break;
+			}
+			out.push(path);
+		}
+	}
+	animFrameCache[key] = out;
+	return out;
+}
+
+/** 该动画前缀有几帧（0 表示没有可用帧）。 */
+export function artAnimCount(styleId: string, prefix: string): number {
+	return artAnimFrames(styleId, prefix).length;
+}
+
+/**
+ * 刷新一个动画挂点：把该前缀的所有帧精灵建好后只显示当前帧。
+ * 同一挂点复用已建帧（不重复创建）；前缀变化时才重建。
+ * @returns 当前可见的精灵；无可用帧时返回 undefined（调用方回退程序化绘制）。
+ */
+export function artAnimInto(
+	holder: Node.Type,
+	styleId: string,
+	prefix: string,
+	frame: number
+): Sprite.Type | undefined {
+	const spec = specOf(styleId);
+	const frames = spec !== undefined ? artAnimFrames(styleId, prefix) : [];
+	const n = frames.length;
+	// 标签带帧数：帧序列变化（美术补图/换前缀）时自动重建
+	const tag = `anim|${styleId}|${prefix}|${n}`;
+	if (holder.tag !== tag) {
+		holder.removeAllChildren();
+		holder.tag = tag;
+		if (spec === undefined || n === 0) {
+			if (DEBUG_ANIM) print(`ANIMNONE ${tag}`);
+			holder.visible = false;
+			return undefined;
+		}
+		for (let i = 0; i < n; i++) {
+			const sprite = artSpriteFromPath(frames[i], spec, true);
+			if (sprite === undefined) {
+				if (DEBUG_ANIM) print(`ANIMSKIP ${tag} i=${i} ${frames[i]}`);
+				continue;
+			}
+			// 用数字标签（1 开始）索引帧，避免依赖运行时不支持的 node.children.length
+			sprite.tag = `f${i + 1}`;
+			sprite.visible = false;
+			holder.addChild(sprite);
+		}
+		if (DEBUG_ANIM) print(`ANIMBUILD ${tag} made=${holder.getChildByTag('f1') !== undefined}`);
+		holder.visible = true;
+	}
+	if (n === 0) return undefined;
+	const idx = ((Math.floor(frame) % n) + n) % n;
+	let visible: Sprite.Type | undefined = undefined;
+	for (let i = 0; i < n; i++) {
+		const s = holder.getChildByTag(`f${i + 1}`) as Sprite.Type | undefined;
+		if (s === undefined) continue;
+		s.visible = i === idx;
+		if (i === idx) visible = s;
+	}
+	return visible;
+}
+
+/**
+ * 让动画挂点整体镜像（在挂点原点＝脚底中心处翻转，不影响各帧对齐）。
+ * 自动遵守素材的 flipX 约定。
+ */
+export function artAnimFace(holder: Node.Type, styleId: string, facingLeft: boolean): void {
+	const spec = ART[styleId];
+	const base = spec !== undefined && spec.flipX === true ? -1 : 1;
+	holder.scaleX = facingLeft ? -base : base;
+}
+
+/** 动画播放速率（帧/秒），按动作区分节奏。 */
+export const ANIM_FPS: Record<string, number> = {
+	idle: 2,
+	walk: 7,
+	work: 6,
+	attack: 13,
+	fall: 8,
+	qilin: 10,
+	hurt: 4,
+};

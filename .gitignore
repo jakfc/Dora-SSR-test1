@@ -33,3 +33,7 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# 本地调试脚本与临时请求（tools/_*.py / _*.lua / _*_req.json）
+tools/_*
+tools/__pycache__/

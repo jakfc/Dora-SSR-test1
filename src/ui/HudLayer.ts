@@ -76,14 +76,22 @@ export interface HudCallbacks {
 	onInteract: (optionIndex?: number) => void;
 	onQilinStep: () => void;
 	onRally: () => void;
+	onBribe: () => void;
 	onVictoryModalConfirm: () => void;
 }
 
-/** 每帧交给 HUD 的额外态势（营建进度 / 招募读秒 / 城外未归人数） */
+/** 每帧交给 HUD 的额外态势（营建进度 / 招募读秒 / 城外未归人数 / 投银与民居） */
 export interface HudExtraInfo {
 	projects: { label: string; pct: number; workers: number }[];
 	recruitRemain: number;
 	stragglers: number;
+	/** 民居：住得下多少人 / 其中几间还是空地 */
+	housing: number;
+	emptyLots: number;
+	/** 民居自然添丁进度 0~1 */
+	houseSpawn: number;
+	/** 当前地标的投银进度（例：「宗祠营建 120/180 两」） */
+	donation: string;
 }
 
 const TOP_BAR_HEIGHT = 64;
@@ -275,8 +283,12 @@ export class HudLayer {
 
 		const btnK = createButton('[K] 集结', 92, 38, 0xff9b2c2c, () => this.callbacks.onRally(), 14);
 		this.node.addChild(btnK);
+
+		// [F] 撒银退敌：开一袋银子买命，让倭寇掉头
+		const btnF = createButton('[F] 撒银', 92, 38, 0xffb7791f, () => this.callbacks.onBribe(), 14);
+		this.node.addChild(btnF);
 		// 布局时再定位，这里先记录引用
-		this.skillButtons = [btnE, btnJ, btnK];
+		this.skillButtons = [btnE, btnJ, btnK, btnF];
 
 		// 地标多选项浮动按钮容器
 		this.extraActionNode = Node();
@@ -413,10 +425,16 @@ export class HudLayer {
 			this.bossBgArt.x = -this.bossWidth / 2;
 		}
 
-		const rightEdge = w - 320;
-		for (let i = 0; i < this.skillButtons.length; i++) {
-			this.skillButtons[i].x = rightEdge + i * 104;
-			this.skillButtons[i].y = 18;
+		// 技能键从右边缘往左排（4 个按钮也要完整落在屏幕内）
+		const skillGap = 12;
+		const skillRight = w - 20;
+		let skillCursor = skillRight;
+		for (let i = this.skillButtons.length - 1; i >= 0; i--) {
+			const skillBtn = this.skillButtons[i];
+			const btnW = skillBtn.size.width > 0 ? skillBtn.size.width : 92;
+			skillBtn.x = skillCursor - btnW;
+			skillBtn.y = 18;
+			skillCursor -= btnW + skillGap;
 		}
 
 		this.extraActionNode.x = 20;
@@ -505,16 +523,26 @@ export class HudLayer {
 
 		this.skipDayBtn.visible = gs.phase === 'DAY' && !this.victoryModal.visible;
 
-		// 营建 / 招募读秒
-		if (info !== undefined && (info.projects.length > 0 || info.recruitRemain > 0)) {
+		// 营建 / 招募读秒 / 投银 / 民居添丁
+		if (info !== undefined) {
 			const parts: string[] = [];
 			for (const p of info.projects) {
 				const pct = Math.max(0, Math.min(100, Math.floor(p.pct * 100)));
 				parts.push(`施工 ${p.label} ${pct}%${p.workers > 0 ? ` (匠${p.workers})` : ' (无匠)'}`);
 			}
 			if (info.recruitRemain > 0) parts.push(`募丁中 ${info.recruitRemain.toFixed(1)}s`);
-			this.workLabel.text = parts.join('   ·   ');
-			this.workLabel.visible = true;
+			if (info.donation.length > 0) parts.push(`捐银 ${info.donation}`);
+			if (info.emptyLots > 0) {
+				parts.push(`民居空地 ${info.emptyLots} 处待投银起造（住房 ${info.housing}）`);
+			} else if (info.houseSpawn > 0) {
+				parts.push(`民居添丁 ${Math.floor(info.houseSpawn * 100)}%`);
+			}
+			if (parts.length > 0) {
+				this.workLabel.text = parts.join('   ·   ');
+				this.workLabel.visible = true;
+			} else {
+				this.workLabel.visible = false;
+			}
 		} else {
 			this.workLabel.visible = false;
 		}
@@ -578,10 +606,21 @@ export class HudLayer {
 	private rebuildExtraButtons(landmark: LandmarkId | undefined): void {
 		this.extraActionNode.removeAllChildren();
 		if (!landmark) return;
+		const gs = GameState.instance;
 
 		if (landmark === 'ANCESTRAL_HALL') {
 			const b1 = createButton('招募族丁 (80银)', 155, 34, 0xff2b6cb0, () => this.callbacks.onInteract(0), 13);
-			const b2 = createButton('升级宗祠 (+4人口)', 165, 34, 0xff805ad5, () => this.callbacks.onInteract(1), 13);
+			const b2 = createButton(
+				`升级宗祠 Lv.${gs.ancestralHallLevel}→${Math.min(
+					gs.ancestralHallLevel + 1,
+					GameConfig.ANCESTRAL_HALL_MAX_LEVEL
+				)} (士气↑)`,
+				165,
+				34,
+				0xff805ad5,
+				() => this.callbacks.onInteract(1),
+				13
+			);
 			b2.x = 165;
 			this.extraActionNode.addChild(b1);
 			this.extraActionNode.addChild(b2);

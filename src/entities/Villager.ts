@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
 import { GameConfig, VillagerRole } from 'src/config/GameConfig';
 import { GameState, BuildProject } from 'src/config/GameState';
 import { Enemy } from 'src/entities/Enemy';
-import { artInto } from 'src/config/Assets';
+import { ANIM_FPS, artAnimCount, artAnimInto, artHide, artReady } from 'src/config/Assets';
 
 export interface ToolDrop {
 	id: number;
@@ -73,14 +73,21 @@ export class Villager {
 	private repairAccum = 0;
 	private shockwaveTimer = 0;
 
+	// 逐帧动画状态
+	private animClock = 0;
+	private animPrevX: number;
+
 	constructor(startX: number, role: VillagerRole = 'IDLE') {
 		this.id = Villager.nextId++;
 		this.x = startX;
+		this.animPrevX = startX;
 		this.wanderTargetX = startX;
 		const cfg = GameConfig.ROLES[role];
 		this.role = role;
-		this.maxHp = cfg.maxHp;
-		this.hp = cfg.maxHp;
+		// 宗祠士气：每级 +8% 气血上限，新丁生来就带
+		const hpScale = 1 + GameState.instance.moraleHpBonus;
+		this.maxHp = Math.round(cfg.maxHp * hpScale);
+		this.hp = this.maxHp;
 
 		this.node = Node();
 		this.node.x = this.x;
@@ -104,8 +111,8 @@ export class Villager {
 		this.role = newRole;
 		const cfg = GameConfig.ROLES[newRole];
 		const ratio = this.maxHp > 0 ? this.hp / this.maxHp : 1;
-		this.maxHp = cfg.maxHp;
-		this.hp = Math.max(20, Math.round(cfg.maxHp * ratio));
+		this.maxHp = Math.round(cfg.maxHp * (1 + GameState.instance.moraleHpBonus));
+		this.hp = Math.max(20, Math.round(this.maxHp * ratio));
 		this.produceTimer = 0;
 		this.attackTimer = 0;
 		this.attackCount = 0;
@@ -141,7 +148,11 @@ export class Villager {
 		const cfg = GameConfig.ROLES[this.role];
 		this.bodyDraw.clear();
 		// 有美术素材时按职业换精灵
-		if (artInto(this.artNode, `villager_${this.role}`) === undefined) {
+		// 有美术素材（静态单帧或逐帧动画）时用精灵替掉程序化方块
+		const hasArt =
+			artReady(`villager_${this.role}`) ||
+			artAnimCount(`villager_${this.role}`, `villager_${this.role.toLowerCase()}`) > 0;
+		if (!hasArt) {
 			// 躯干
 			drawRect(this.bodyDraw, -11, 0, 22, 40, cfg.color, 0xff1a202c);
 			// 头部
@@ -166,6 +177,45 @@ export class Villager {
 		this.roleLabel.color = Color(this.carrying ? 0xfff6e05e : 0xffe2e8f0);
 	}
 
+	/** 每帧推进角色动画：按当前动作挑前缀，缺帧时逐级回退。 */
+	private tickAnim(dt: number): void {
+		const moving = Math.abs(this.x - this.animPrevX) > 0.5;
+		this.animPrevX = this.x;
+		let name = 'idle';
+		if (this.attackTimer > 0) name = 'attack';
+		else if (moving) name = 'walk';
+		else if (
+			this.carrying ||
+			this.role === 'FARMER' ||
+			this.role === 'SALT_WORKER' ||
+			this.role === 'BUILDER'
+		) {
+			name = 'work';
+		}
+
+		const styleId = `villager_${this.role}`;
+		const base = `villager_${this.role.toLowerCase()}`;
+		let prefix = `${base}_${name}`;
+		let frames = artAnimCount(styleId, prefix);
+		if (frames === 0 && name !== 'walk') {
+			// 该动作没有专属帧：退到走路帧，好歹还在动
+			prefix = `${base}_walk`;
+			frames = artAnimCount(styleId, prefix);
+		}
+		if (frames === 0) {
+			// 连走路帧也没有：退回静态单帧
+			prefix = base;
+			frames = artAnimCount(styleId, prefix);
+		}
+		if (frames === 0) {
+			artHide(this.artNode);
+			return;
+		}
+		this.animClock += dt;
+		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
+		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
+	}
+
 	private moveToward(targetX: number, dt: number, speedScale = 1): boolean {
 		const speed = GameConfig.ROLES[this.role].moveSpeed * speedScale;
 		const diff = targetX - this.x;
@@ -179,6 +229,8 @@ export class Villager {
 
 	public update(dt: number, ctx: VillagerUpdateContext): void {
 		if (this.dead) return;
+
+		this.tickAnim(dt);
 
 		if (this.attackTimer > 0) this.attackTimer = Math.max(0, this.attackTimer - dt);
 		if (this.shockwaveTimer > 0) {
@@ -443,23 +495,25 @@ export class Villager {
 			if (bestDist > cfg.attackRange) {
 				this.moveToward(nearestEnemy.x, dt);
 			} else if (this.attackTimer <= 0) {
-				// 攻速计算：断粮减半，忠义光环 +30%
+				// 攻速计算：断粮减半，忠义光环 +30%，宗祠士气每级 +12%
 				let speedMult = 1.0;
 				if (gs.isLowFood) speedMult *= 0.5;
 				if (ctx.playerInAura(this.x)) speedMult *= 1 + GameConfig.PLAYER.auraAttackSpeedBonus;
+				speedMult *= 1 + gs.moraleBonus;
 
 				this.attackTimer = cfg.attackInterval / speedMult;
 				this.attackCount++;
 
 				const dir = nearestEnemy.x >= this.x ? 1 : -1;
-				nearestEnemy.takeDamage(cfg.attackDamage, dir * 12);
+				const moraleDmg = 1 + gs.moraleBonus;
+				nearestEnemy.takeDamage(Math.round(cfg.attackDamage * moraleDmg), dir * 12);
 
 				// 王家拳武师每3次攻击触发范围震击并回血
 				if (this.role === 'KUNG_FU' && this.attackCount % 3 === 0) {
 					this.shockwaveTimer = 0.25;
 					for (const e of ctx.enemies) {
 						if (!e.dead && e !== nearestEnemy && Math.abs(e.x - this.x) <= 95) {
-							e.takeDamage(Math.round(cfg.attackDamage * 0.75), dir * 24);
+							e.takeDamage(Math.round(cfg.attackDamage * 0.75 * moraleDmg), dir * 24);
 						}
 					}
 					this.hp = Math.min(this.maxHp, this.hp + 15);

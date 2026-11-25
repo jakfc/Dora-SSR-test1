@@ -198,6 +198,70 @@ export function GameScene(): Node.Type {
 		worldLayer.addChild(lbl);
 	}
 
+	// ---- 民居：人口之源（等级决定住得下多少人）----
+	// 与地标同层，但必须在村民之前创建，否则屋子会盖在人头上。
+	const houseDraw = DrawNode();
+	worldLayer.addChild(houseDraw);
+	const houseArtNodes: Node.Type[] = [];
+	for (let i = 0; i < gs.houses.length; i++) {
+		const n = Node();
+		worldLayer.addChild(n);
+		houseArtNodes.push(n);
+	}
+
+	/** 按等级重画民居；有美术就换贴图，缺美术时用色块（空地只画地基） */
+	const houseLabels: Label.Type[] = [];
+	const refreshHouses = () => {
+		houseDraw.clear();
+		for (let i = 0; i < gs.houses.length; i++) {
+			const h = gs.houses[i];
+			const node = houseArtNodes[i];
+			if (node === undefined) continue;
+			node.x = h.x;
+			node.y = GameConfig.GROUND_Y;
+			const artId = h.level <= 0 ? 'lm_house_plot' : `lm_house_lv${h.level}`;
+			if (artInto(node, artId) !== undefined) continue; // 有贴图就不用画色块
+			if (h.level <= 0) {
+				// 空地：只画一圈地基，等玩家投银起造
+				drawRect(houseDraw, h.x - 40, GameConfig.GROUND_Y - 3, 80, 6, 0xff3b4a59, 0xffe2e8f0);
+				continue;
+			}
+			const w = 64 + h.level * 16;
+			const hh = 42 + h.level * 12;
+			const wall = 0xffcbd5e0;
+			const roof = h.level >= 3 ? 0xff7b341e : (h.level >= 2 ? 0xff9c4221 : 0xff4a5568);
+			drawRect(houseDraw, h.x - w / 2, GameConfig.GROUND_Y, w, hh, wall, 0xff2d3748);
+			drawRect(houseDraw, h.x - w / 2 - 7, GameConfig.GROUND_Y + hh, w + 14, 13, roof, 0xff1a202c);
+			drawRect(houseDraw, h.x - 10, GameConfig.GROUND_Y, 20, hh * 0.5, 0xff744210);
+			// 房子升级时同步刷新挂牌
+			const lbl = houseLabels[i];
+			if (lbl !== undefined) {
+				lbl.text =
+					h.level <= 0
+						? '民居遗址\n(投银起造)'
+						: `民居 Lv.${h.level}\n(可住 ${
+							h.level * GameConfig.HOUSE_CAPACITY_PER_LEVEL
+						} 人)`;
+			}
+		}
+	};
+	for (let i = 0; i < gs.houses.length; i++) {
+		const h = gs.houses[i];
+		const lbl = Label('sarasa-mono-sc-regular', 13) as Label.Type;
+		lbl.text =
+			h.level <= 0
+				? '民居遗址\n(投银起造)'
+				: `民居 Lv.${h.level}\n(可住 ${
+					h.level * GameConfig.HOUSE_CAPACITY_PER_LEVEL
+				} 人)`;
+		lbl.x = h.x;
+		lbl.y = GameConfig.GROUND_Y + 100;
+		lbl.color = Color(0xfffefcbf);
+		worldLayer.addChild(lbl);
+		houseLabels.push(lbl);
+	}
+	refreshHouses();
+
 	// 动态城门绘制（东门与内城水门）
 	const gatesDraw = DrawNode();
 	worldLayer.addChild(gatesDraw);
@@ -355,7 +419,10 @@ export function GameScene(): Node.Type {
 	let waitingVictoryModal = false;
 	// 黄昏未归警告：每昼夜只弹一次
 	let curfewWarnedDay = 0;
-	// TEMP 验证探针
+	// 调试探针：默认关闭。开发时改成 true 可在引擎日志里看到每秒态势（PROBE ...）
+	const DEBUG_PROBE = false;
+	// 调试注入：默认关闭。打开后会塞满银粮、把两名负盐灶户丢到远滩涂，方便一次性观察夜猎
+	const DEBUG_SEED = false;
 	let probeTimer = 1.0;
 	let probeSeeded = false;
 	let cameraX = GameConfig.CAMERA_MIN_X;
@@ -554,12 +621,30 @@ export function GameScene(): Node.Type {
 	/** 工程竣工结算（等级 / 耐久 / 贴图 / 特效） */
 	const completeProject = (p: BuildProject) => {
 		if (p.kind === 'HALL_UPGRADE') {
+			const oldHpBonus = gs.moraleHpBonus;
 			gs.ancestralHallLevel++;
 			gs.ancestralHallMaxHp += GameConfig.ANCESTRAL_HALL_HP_PER_LEVEL;
 			gs.ancestralHallHp = Math.min(
 				gs.ancestralHallMaxHp,
 				gs.ancestralHallHp + GameConfig.ANCESTRAL_HALL_HP_PER_LEVEL
 			);
+			// 祠堂香火更旺：在册族人按角色基础血量同步长气血（现役也回血）
+			const hpGain = gs.moraleHpBonus - oldHpBonus;
+			if (hpGain > 0) {
+				for (const v of villagers) {
+					if (v.dead) continue;
+					const gain = Math.round(GameConfig.ROLES[v.role].maxHp * hpGain);
+					v.maxHp += gain;
+					v.hp = Math.min(v.maxHp, v.hp + gain);
+				}
+				// 敌台同沾宗祠香火：已启用的弩炮/炮台气血同步增长
+				for (const t of gs.towers) {
+					if (!t.unlocked) continue;
+					const gain = Math.round(GameConfig.TOWER_STATS[t.type].baseHp * hpGain);
+					t.maxHp += gain;
+					t.hp = Math.min(t.maxHp, t.hp + gain);
+				}
+			}
 			refreshEnvironmentVisuals();
 			playFx(
 				worldLayer,
@@ -571,8 +656,10 @@ export function GameScene(): Node.Type {
 				26
 			);
 			hud.showToast(
-				`王氏宗祠竣工，升至 Lv.${gs.ancestralHallLevel}！人口上限 ${gs.maxPopulation}。`,
-				2.6
+				`王氏宗祠竣工，升至 Lv.${gs.ancestralHallLevel}！族人士气 +${Math.round(
+					gs.moraleBonus * 100
+				)}%（攻速/伤害），气血 +${Math.round(gs.moraleHpBonus * 100)}%。`,
+				2.8
 			);
 			return;
 		}
@@ -595,6 +682,23 @@ export function GameScene(): Node.Type {
 			return;
 		}
 
+		if (p.kind === 'HOUSE_UPGRADE') {
+			const idx = Number(p.towerId.replace('HOUSE:', ''));
+			const house = gs.houses[idx];
+			if (house !== undefined) {
+				house.level = Math.min(GameConfig.HOUSE_MAX_LEVEL, house.level + 1);
+				house.maxHp = GameConfig.HOUSE_BASE_HP + (house.level - 1) * 120;
+				house.hp = house.maxHp;
+				refreshHouses();
+				playFx(worldLayer, 'fx_levelup', house.x, GameConfig.GROUND_Y + 70, 0.6, 0.3, 22);
+				hud.showToast(
+					`民居${house.level === 1 ? '落成' : `升至 Lv.${house.level}`}，可住 ${gs.housingCapacity} 人。`,
+					2.4
+				);
+			}
+			return;
+		}
+
 		let tower: DefenseTower | undefined = undefined;
 		for (const t of towers) {
 			if (t.state.id === p.towerId) tower = t;
@@ -602,6 +706,14 @@ export function GameScene(): Node.Type {
 		if (tower === undefined) return;
 		if (p.kind === 'TOWER_UNLOCK') {
 			tower.state.unlocked = true;
+			// 新敌台同样享受宗祠士气带来的气血加成
+			const boosted = Math.round(
+				GameConfig.TOWER_STATS[tower.state.type].baseHp * (1 + gs.moraleHpBonus)
+			);
+			if (boosted > tower.state.maxHp) {
+				tower.state.maxHp = boosted;
+				tower.state.hp = boosted;
+			}
 		} else {
 			tower.state.level++;
 			tower.state.maxHp += 120;
@@ -657,11 +769,171 @@ export function GameScene(): Node.Type {
 		refreshEnvironmentVisuals();
 	};
 
+	// 银袋抛物线：投银时飞向升级点（程序化小方块，无美术也看得见）
+	const silverThrows: {
+		node: Node.Type;
+		t: number;
+		x0: number;
+		y0: number;
+		x1: number;
+		y1: number;
+	}[] = [];
+	const spawnSilverThrow = (x0: number, x1: number) => {
+		const n = Node();
+		const d = DrawNode();
+		drawRect(d, -8, -8, 16, 16, 0xfff6e05e, 0xff744210);
+		n.addChild(d);
+		n.x = x0;
+		n.y = GameConfig.GROUND_Y + 46;
+		worldLayer.addChild(n);
+		silverThrows.push({
+			node: n,
+			t: 0,
+			x0,
+			y0: GameConfig.GROUND_Y + 46,
+			x1,
+			y1: GameConfig.GROUND_Y + 34,
+		});
+	};
+
+	/** 投银点账目：key → 显示名与所需总额（供 HUD 显示“还差多少”） */
+	const donationBook: { key: string; label: string; cost: number }[] = [];
+	const rememberDonation = (key: string, label: string, cost: number) => {
+		for (const d of donationBook) {
+			if (d.key === key) {
+				d.label = label;
+				d.cost = cost;
+				return;
+			}
+		}
+		donationBook.push({ key, label, cost });
+	};
+
+	/** 当前所有没捐满的池子，形如「招募族丁 40/80」；全都空了就返回空串 */
+	const donationSummary = (): string => {
+		const parts: string[] = [];
+		for (const d of donationBook) {
+			const have = gs.donationOf(d.key);
+			if (have > 0) parts.push(`${d.label} ${have}/${d.cost}`);
+		}
+		return parts.join('  ');
+	};
+
+	/**
+	 * 投一袋银两到升级点：捐满 cost 才动工，多投的留在池里下次接着攒。
+	 * 所有升级/建造/置办/招募都走这里——“银两升级都得人跑过去扔”。
+	 */
+	const throwSilver = (
+		purpose: string,
+		targetX: number,
+		cost: number,
+		label: string,
+		onFull: () => void
+	) => {
+		rememberDonation(purpose, label, cost);
+		const bag = GameConfig.SILVER_BAG;
+		if (gs.silver < bag) {
+			hud.showToast(`白银不足，投一袋需 ${bag} 两（现有 ${gs.silver} 两）。`, 2.0);
+			return;
+		}
+		gs.spendSilver(bag);
+		spawnSilverThrow(player.x + player.facing * 18, targetX);
+		const total = gs.addDonation(purpose, bag);
+		if (total >= cost) {
+			gs.clearDonation(purpose);
+			onFull();
+			return;
+		}
+		hud.showToast(`【${label}】已投 ${total}/${cost} 两，继续投银。`, 1.6);
+	};
+
+	/** 站在哪间民居的投银点旁（-1 = 不在任何民居旁） */
+	const houseInRange = (): number => {
+		let best = -1;
+		let bestDist = GameConfig.PLAYER.interactRange;
+		for (let i = 0; i < gs.houses.length; i++) {
+			const d = Math.abs(gs.houses[i].x - player.x);
+			if (d <= bestDist) {
+				bestDist = d;
+				best = i;
+			}
+		}
+		return best;
+	};
+
+	/** 民居下一级要投多少银：空地起造最便宜，越往上越贵 */
+	const houseUpgradeCost = (level: number): number => {
+		if (level <= 0) return GameConfig.HOUSE_BUILD_COST;
+		if (level >= 2) return GameConfig.HOUSE_UPGRADE_COST_LV3;
+		return GameConfig.HOUSE_UPGRADE_COST_LV2;
+	};
+
+	/** [F] 撒银退敌：给最近的倭寇一笔银子，让他掉头离场（头目只买得到一瞬喘息） */
+	const bribeNearestEnemy = () => {
+		if (waitingVictoryModal) return;
+		let target: Enemy | undefined = undefined;
+		let bestDist = GameConfig.BRIBE_RANGE;
+		for (const e of enemies) {
+			if (e.dead || e.escaped || e.bribed) continue;
+			const d = Math.abs(e.x - player.x);
+			if (d <= bestDist) {
+				bestDist = d;
+				target = e;
+			}
+		}
+		if (target === undefined) {
+			hud.showToast(`身侧百步没有可以买通的倭寇。`, 1.8);
+			return;
+		}
+		const cost = GameConfig.BRIBE_COST[target.type];
+		if (gs.silver < cost) {
+			hud.showToast(`买命需 ${cost} 两白银，库中不足！`, 1.8);
+			return;
+		}
+		gs.spendSilver(cost);
+		spawnSilverThrow(player.x + player.facing * 18, target.x);
+		target.bribe();
+		if (target.type === 'BOSS') {
+			hud.showToast(`塞了 ${cost} 两给倭酋，只撂得他踉跄一阵！`, 2.4);
+		} else {
+			hud.showToast(`付 ${cost} 两买命，倭寇收银退兵。`, 2.0);
+		}
+	};
+
 	const handleInteract = (optionIndex = 0) => {
 		if (waitingVictoryModal) return;
+
+		// 民居优先：站到民居投银点旁就是「投银起造 / 扩建民居」
+		const houseIdx = houseInRange();
+		if (houseIdx >= 0) {
+			const house = gs.houses[houseIdx];
+			if (house.level >= GameConfig.HOUSE_MAX_LEVEL) {
+				hud.showToast(`民居已达最高等级，可住 ${house.level * GameConfig.HOUSE_CAPACITY_PER_LEVEL} 人。`, 2.0);
+				return;
+			}
+			const key = `HOUSE:${house.index}`;
+			if (gs.hasProject('HOUSE_UPGRADE', key)) {
+				hud.showToast('这间民居正在施工中。', 2.0);
+				return;
+			}
+			const cost = houseUpgradeCost(house.level);
+			const targetLevel = house.level + 1;
+			throwSilver(key, house.x, cost, house.level <= 0 ? '起造民居' : '扩建民居', () =>
+				beginProject(
+					'HOUSE_UPGRADE',
+					`民居 Lv.${targetLevel}`,
+					house.x,
+					GameConfig.CONSTRUCTION_SECONDS.HOUSE_UPGRADE,
+					targetLevel,
+					key
+				)
+			);
+			return;
+		}
+
 		const landmark = player.findNearestLandmark();
 		if (!landmark) {
-			hud.showToast('请靠近宗祠、水田、盐课司、内城水门、主城墙或东门后再交互', 2.0);
+			hud.showToast('请靠近宗祠、民居、水田、盐课司、内城水门、主城墙或东门后再交互', 2.0);
 			return;
 		}
 
@@ -676,58 +948,57 @@ export function GameScene(): Node.Type {
 					hud.showToast('宗祠正在施工中，等候工匠完工。', 2.0);
 					return;
 				}
-				if (!gs.spendSilver(cost)) {
-					hud.showToast(`升级宗祠需 ${cost} 白银！`, 2.0);
-					return;
-				}
 				// 等级越高工期越长（+20%/级）
 				const hallSeconds =
 					GameConfig.CONSTRUCTION_SECONDS.HALL_UPGRADE * (1 + 0.2 * (gs.ancestralHallLevel - 1));
-				beginProject(
-					'HALL_UPGRADE',
-					`宗祠 Lv.${gs.ancestralHallLevel + 1}`,
-					GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x,
-					hallSeconds,
-					gs.ancestralHallLevel + 1
+				throwSilver('HALL:UPGRADE', GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x, cost, '宗祠营建', () =>
+					beginProject(
+						'HALL_UPGRADE',
+						`宗祠 Lv.${gs.ancestralHallLevel + 1}`,
+						GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x,
+						hallSeconds,
+						gs.ancestralHallLevel + 1
+					)
 				);
 				return;
 			}
 
-			if (
-				gs.populationCount + gs.recruits.length >= gs.maxPopulation
-			) {
-				hud.showToast('人口已达上限，请升级王氏宗祠！', 2.0);
+			if (gs.freeSlots <= 0) {
+				hud.showToast(
+					`住不下了（住房 ${gs.housingCapacity} / 口粮可养 ${gs.foodCapacity}），请投银起造民居或多种粮。`,
+					2.6
+				);
 				return;
 			}
 			if (gs.recruits.length >= GameConfig.RECRUIT_MAX_PENDING) {
 				hud.showToast('已有族人正在赶来报到的路上，稍候。', 2.0);
 				return;
 			}
-			if (!gs.spendSilver(GameConfig.RECRUIT_VILLAGER_COST)) {
-				hud.showToast(`招募族丁需 ${GameConfig.RECRUIT_VILLAGER_COST} 白银！`, 2.0);
-				return;
-			}
-			gs.startRecruit();
-			hud.showToast(
-				`已递帖招揽族人，${GameConfig.RECRUIT_SECONDS.toFixed(0)} 秒后到宗祠报到。`,
-				2.0
+			throwSilver(
+				'HALL:RECRUIT',
+				GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x,
+				GameConfig.RECRUIT_VILLAGER_COST,
+				'招募族丁',
+				() => {
+					gs.startRecruit();
+					hud.showToast(
+						`已递帖招揽族人，${GameConfig.RECRUIT_SECONDS.toFixed(0)} 秒后到宗祠报到。`,
+						2.0
+					);
+				}
 			);
 		} else if (landmark === 'PADDY_FIELD') {
 			const cost = GameConfig.ROLES.FARMER.toolCost;
-			if (!gs.spendSilver(cost)) {
-				hud.showToast(`置办锄头需 ${cost} 白银！`, 2.0);
-				return;
-			}
-			spawnTool(GameConfig.MAP_LANDMARKS.PADDY_FIELD.x, 'FARMER');
-			addFloatingText('置办【锄头】', GameConfig.MAP_LANDMARKS.PADDY_FIELD.x, GameConfig.GROUND_Y + 80);
+			throwSilver('TOOL:FARMER', GameConfig.MAP_LANDMARKS.PADDY_FIELD.x, cost, '置办锄头', () => {
+				spawnTool(GameConfig.MAP_LANDMARKS.PADDY_FIELD.x, 'FARMER');
+				addFloatingText('置办【锄头】', GameConfig.MAP_LANDMARKS.PADDY_FIELD.x, GameConfig.GROUND_Y + 80);
+			});
 		} else if (landmark === 'SALT_OFFICE') {
 			const cost = GameConfig.ROLES.SALT_WORKER.toolCost;
-			if (!gs.spendSilver(cost)) {
-				hud.showToast(`置办盐铲需 ${cost} 白银！`, 2.0);
-				return;
-			}
-			spawnTool(GameConfig.MAP_LANDMARKS.SALT_OFFICE.x, 'SALT_WORKER');
-			addFloatingText('置办【盐铲】', GameConfig.MAP_LANDMARKS.SALT_OFFICE.x, GameConfig.GROUND_Y + 80);
+			throwSilver('TOOL:SALT_WORKER', GameConfig.MAP_LANDMARKS.SALT_OFFICE.x, cost, '置办盐铲', () => {
+				spawnTool(GameConfig.MAP_LANDMARKS.SALT_OFFICE.x, 'SALT_WORKER');
+				addFloatingText('置办【盐铲】', GameConfig.MAP_LANDMARKS.SALT_OFFICE.x, GameConfig.GROUND_Y + 80);
+			});
 		} else if (landmark === 'INNER_GATE') {
 			if (optionIndex === 1) {
 				const innerTower = towers.find((t) => t.state.id === 'INNER_TOWER');
@@ -738,17 +1009,15 @@ export function GameScene(): Node.Type {
 						hud.showToast('内城炮台正在施工中。', 2.0);
 						return;
 					}
-					if (!gs.spendSilver(cost)) {
-						hud.showToast(`石库炮台基石需 ${cost} 白银（须工匠施工）！`, 2.0);
-						return;
-					}
-					beginProject(
-						'TOWER_UNLOCK',
-						'内城佛郎机炮台',
-						innerTower.state.x,
-						GameConfig.CONSTRUCTION_SECONDS.TOWER_UNLOCK,
-						1,
-						'INNER_TOWER'
+					throwSilver('TOWER:INNER_TOWER', innerTower.state.x, cost, '内城炮台营建', () =>
+						beginProject(
+							'TOWER_UNLOCK',
+							'内城佛郎机炮台',
+							innerTower.state.x,
+							GameConfig.CONSTRUCTION_SECONDS.TOWER_UNLOCK,
+							1,
+							'INNER_TOWER'
+						)
 					);
 				} else {
 					const cost = GameConfig.TOWER_STATS.CANNON.upgradeCost;
@@ -756,38 +1025,36 @@ export function GameScene(): Node.Type {
 						hud.showToast('炮台正在升级中。', 2.0);
 						return;
 					}
-					if (!gs.spendSilver(cost)) {
-						hud.showToast(`升级炮台需 ${cost} 白银！`, 2.0);
-						return;
-					}
-					beginProject(
-						'TOWER_UPGRADE',
-						`内城炮台 Lv.${innerTower.state.level + 1}`,
-						innerTower.state.x,
-						GameConfig.CONSTRUCTION_SECONDS.TOWER_UPGRADE,
-						innerTower.state.level + 1,
-						'INNER_TOWER'
+					throwSilver('TOWER:INNER_TOWER', innerTower.state.x, cost, '内城炮台升级', () =>
+						beginProject(
+							'TOWER_UPGRADE',
+							`内城炮台 Lv.${innerTower.state.level + 1}`,
+							innerTower.state.x,
+							GameConfig.CONSTRUCTION_SECONDS.TOWER_UPGRADE,
+							innerTower.state.level + 1,
+							'INNER_TOWER'
+						)
 					);
 				}
 				return;
 			}
 
 			const cost = GameConfig.ROLES.BUILDER.toolCost;
-			if (!gs.spendSilver(cost)) {
-				hud.showToast(`置办木锤需 ${cost} 白银！`, 2.0);
-				return;
-			}
-			spawnTool(GameConfig.MAP_LANDMARKS.INNER_GATE.x - 30, 'BUILDER');
-			addFloatingText('置办【木锤】', GameConfig.MAP_LANDMARKS.INNER_GATE.x - 30, GameConfig.GROUND_Y + 80);
+			throwSilver('TOOL:BUILDER', GameConfig.MAP_LANDMARKS.INNER_GATE.x - 30, cost, '置办木锤', () => {
+				spawnTool(GameConfig.MAP_LANDMARKS.INNER_GATE.x - 30, 'BUILDER');
+				addFloatingText('置办【木锤】', GameConfig.MAP_LANDMARKS.INNER_GATE.x - 30, GameConfig.GROUND_Y + 80);
+			});
 		} else if (landmark === 'MAIN_WALL') {
 			const role: VillagerRole = optionIndex === 1 ? 'KUNG_FU' : 'MILITIA';
 			const cfg = GameConfig.ROLES[role];
-			if (!gs.spendSilver(cfg.toolCost)) {
-				hud.showToast(`置办【${cfg.toolName}】需 ${cfg.toolCost} 白银！`, 2.0);
-				return;
-			}
-			spawnTool(GameConfig.MAP_LANDMARKS.MAIN_WALL.x, role);
-			addFloatingText(`置办【${cfg.toolName}】`, GameConfig.MAP_LANDMARKS.MAIN_WALL.x, GameConfig.GROUND_Y + 80);
+			throwSilver(`TOOL:${role}`, GameConfig.MAP_LANDMARKS.MAIN_WALL.x, cfg.toolCost, `置办${cfg.toolName}`, () => {
+				spawnTool(GameConfig.MAP_LANDMARKS.MAIN_WALL.x, role);
+				addFloatingText(
+					`置办【${cfg.toolName}】`,
+					GameConfig.MAP_LANDMARKS.MAIN_WALL.x,
+					GameConfig.GROUND_Y + 80
+				);
+			});
 		} else if (landmark === 'EAST_GATE') {
 			if (optionIndex === 1) {
 				if (gs.eastGateLevel >= GameConfig.EAST_GATE_MAX_LEVEL) {
@@ -799,18 +1066,16 @@ export function GameScene(): Node.Type {
 					hud.showToast('东门瓮城正在加固中。', 2.0);
 					return;
 				}
-				if (!gs.spendSilver(cost)) {
-					hud.showToast(`加固东门需 ${cost} 白银！`, 2.0);
-					return;
-				}
 				const gateSeconds =
 					GameConfig.CONSTRUCTION_SECONDS.EAST_GATE_UPGRADE * (1 + 0.15 * (gs.eastGateLevel - 1));
-				beginProject(
-					'EAST_GATE_UPGRADE',
-					`东门 Lv.${gs.eastGateLevel + 1}`,
-					GameConfig.MAP_LANDMARKS.EAST_GATE.x,
-					gateSeconds,
-					gs.eastGateLevel + 1
+				throwSilver('GATE:EAST', GameConfig.MAP_LANDMARKS.EAST_GATE.x, cost, '东门加固', () =>
+					beginProject(
+						'EAST_GATE_UPGRADE',
+						`东门 Lv.${gs.eastGateLevel + 1}`,
+						GameConfig.MAP_LANDMARKS.EAST_GATE.x,
+						gateSeconds,
+						gs.eastGateLevel + 1
+					)
 				);
 				return;
 			}
@@ -831,17 +1096,15 @@ export function GameScene(): Node.Type {
 					return;
 				}
 				const cost = 220;
-				if (!gs.spendSilver(cost)) {
-					hud.showToast(`筑盐田敌台需 ${cost} 白银（须工匠施工）！`, 2.0);
-					return;
-				}
-				beginProject(
-					'TOWER_UNLOCK',
-					'盐田敌台',
-					saltTower.state.x,
-					GameConfig.CONSTRUCTION_SECONDS.TOWER_UNLOCK,
-					1,
-					'SALT_TOWER'
+				throwSilver('TOWER:SALT_TOWER', saltTower.state.x, cost, '盐田敌台营建', () =>
+					beginProject(
+						'TOWER_UNLOCK',
+						'盐田敌台',
+						saltTower.state.x,
+						GameConfig.CONSTRUCTION_SECONDS.TOWER_UNLOCK,
+						1,
+						'SALT_TOWER'
+					)
 				);
 				return;
 			}
@@ -879,6 +1142,7 @@ export function GameScene(): Node.Type {
 				hud.showToast(`鸣鼓集结！已召回/集结 ${res.recalledCount} 名族丁。`, 2.0);
 			}
 		},
+		onBribe: () => bribeNearestEnemy(),
 		onVictoryModalConfirm: () => {
 			waitingVictoryModal = false;
 			gs.day++;
@@ -936,6 +1200,7 @@ export function GameScene(): Node.Type {
 				hud.showToast(`鸣鼓集结！已召回/集结 ${res.recalledCount} 名族丁。`, 2.0);
 			}
 		}
+		if (Keyboard.isKeyDown(KeyName.F)) bribeNearestEnemy();
 
 		const nearestLandmark = player.update(clampedDt, moveInput);
 
@@ -1093,6 +1358,13 @@ export function GameScene(): Node.Type {
 			);
 		}
 
+		// 5.3 民居添丁：住房与粮食都有余裕时，民居自己慢慢走出人来（比交银招募慢得多）
+		const bornFromHouses = gs.tickHouses(clampedDt);
+		for (const born of bornFromHouses) {
+			spawnVillager(born.x, 'IDLE');
+			addFloatingText('+1 族丁', born.x, GameConfig.GROUND_Y + 110, 0xff9ae6b4);
+		}
+
 		// 清理阵亡族丁并同步快照（背着盐被杀 → 盐担失落城外）
 		for (let i = villagers.length - 1; i >= 0; i--) {
 			const v = villagers[i];
@@ -1124,7 +1396,22 @@ export function GameScene(): Node.Type {
 			e.update(clampedDt, villagers);
 		}
 		for (let i = enemies.length - 1; i >= 0; i--) {
-			if (enemies[i].dead) enemies.splice(i, 1);
+			if (enemies[i].escaped || (enemies[i].dead && enemies[i].dying === 0)) enemies.splice(i, 1);
+		}
+
+		// 6.2 投银抛物线：银袋飞完落地，化一小簇银光
+		for (let i = silverThrows.length - 1; i >= 0; i--) {
+			const bag = silverThrows[i];
+			bag.t += clampedDt / GameConfig.THROW_SECONDS;
+			if (bag.t >= 1) {
+				playFx(worldLayer, 'fx_levelup', bag.x1, GameConfig.GROUND_Y + 38, 0.26, 0.2, 6);
+				bag.node.removeFromParent();
+				silverThrows.splice(i, 1);
+				continue;
+			}
+			bag.node.x = bag.x0 + (bag.x1 - bag.x0) * bag.t;
+			bag.node.y =
+				bag.y0 + (bag.y1 - bag.y0) * bag.t + Math.sin(bag.t * Math.PI) * 44;
 		}
 
 		// 6. 更新飘字
@@ -1179,12 +1466,11 @@ export function GameScene(): Node.Type {
 			hud.showToast(GameConfig.HISTORICAL_QUOTES.CURFEW_WARNING, 3.4);
 		}
 
-		// TEMP 验证：首帧注入夜晚追猎局面，并每秒打印态势（验完删除）
-		if (!probeSeeded) {
+		if (DEBUG_SEED && !probeSeeded) {
 			probeSeeded = true;
 			gs.silver = 5000;
 			gs.food = 5000;
-			// 两名背着盐的灶户被丢在远滩涂，天色马上转黄皆
+			// 两名背着盐的灶户被丢在远滩涂，天色马上转黄昏
 			spawnVillager(4300, 'SALT_WORKER');
 			spawnVillager(4520, 'SALT_WORKER');
 			for (const v of villagers) {
@@ -1197,7 +1483,7 @@ export function GameScene(): Node.Type {
 			gs.dayTimer = 8;
 		}
 		probeTimer -= clampedDt;
-		if (probeTimer <= 0) {
+		if (DEBUG_PROBE && probeTimer <= 0) {
 			probeTimer = 1.0;
 			const sw = villagers
 				.filter((v) => v.role === 'SALT_WORKER')
@@ -1206,7 +1492,11 @@ export function GameScene(): Node.Type {
 			print(
 				`PROBE d=${gs.day} ph=${gs.phase} t=${gs.dayTimer.toFixed(1)} pop=${gs.populationCount} sw=[${sw.join(
 					','
-				)}] builders=${bd} proj=${gs.projects.length} rec=${gs.recruits.length} straggle=${stragglers} enemy=${enemies.length} salv=${scavenges.length}`
+				)}] builders=${bd} proj=${gs.projects.length} rec=${gs.recruits.length} straggle=${stragglers} enemy=${enemies.length} salv=${scavenges.length} hall=${gs.ancestralHallLevel} mor=${Math.round(
+					gs.moraleBonus * 100
+				)}/${Math.round(gs.moraleHpBonus * 100)} hpop=${gs.housingCapacity}/${gs.foodCapacity} houseLv=[${gs.houses
+					.map((h) => h.level)
+					.join(',')}] don=${donationSummary()}`
 			);
 		}
 
@@ -1226,6 +1516,10 @@ export function GameScene(): Node.Type {
 				})),
 				recruitRemain: gs.recruits.length > 0 ? gs.recruits[0].remain : 0,
 				stragglers,
+				housing: gs.housingCapacity,
+				emptyLots: gs.houses.filter((h) => h.level <= 0).length,
+				houseSpawn: gs.freeSlots > 0 ? gs.houseSpawnProgress : 0,
+				donation: donationSummary(),
 			}
 		);
 		return false;

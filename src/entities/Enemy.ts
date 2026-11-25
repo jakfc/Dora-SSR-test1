@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Sprite, Vec2 } from 'Dora';
 import { EnemyType, GameConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Villager } from 'src/entities/Villager';
-import { artInto, artStretch } from 'src/config/Assets';
+import { ANIM_FPS, artAnimCount, artAnimInto, artHide, artReady, artStretch } from 'src/config/Assets';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -40,13 +40,18 @@ export class Enemy {
 	public bribed = false;
 	/** 已退场（被撁退而不算阵亡） */
 	public escaped = false;
+	/** 阵亡倒地动画剩余时间（>0 时尸体留在场上，倒完才移除） */
+	public dying = 0;
 	private bribeStunTimer = 0;
 	private attackTimer = 0;
 	private hitFlashTimer = 0;
+	private animClock = 0;
+	private animPrevX: number;
 
 	constructor(type: EnemyType, spawnX = GameConfig.SPAWN_X) {
 		this.type = type;
 		this.x = spawnX;
+		this.animPrevX = spawnX;
 		const cfg = GameConfig.ENEMIES[type];
 		this.maxHp = cfg.maxHp;
 		this.hp = cfg.maxHp;
@@ -87,8 +92,9 @@ export class Enemy {
 		const hw = cfg.width / 2;
 		const fill = this.hitFlashTimer > 0 ? 0xffffffff : cfg.color;
 		this.bodyDraw.clear();
-		// 有美术素材时用精灵替掉方块倭寇
-		if (artInto(this.artNode, `enemy_${this.type}`) === undefined) {
+		// 有美术素材（静态单帧或逐帧动画）时用精灵替掉方块倭寇
+		const hasArt = artReady(`enemy_${this.type}`) || artAnimCount(`enemy_${this.type}`, `enemy_${this.type.toLowerCase()}`) > 0;
+		if (!hasArt) {
 			drawRect(this.bodyDraw, -hw, 0, cfg.width, cfg.height, fill, 0xff1a202c);
 			// 倭刀朝左指示
 			drawRect(this.bodyDraw, -hw - 16, cfg.height * 0.45, 16, 4, 0xffe2e8f0);
@@ -124,7 +130,8 @@ export class Enemy {
 			const cfg = GameConfig.ENEMIES[this.type];
 			GameState.instance.addSilver(cfg.rewardSilver);
 			GameState.instance.totalKills++;
-			this.node.removeFromParent();
+			this.dying = 0.7;
+			this.tickAnim(0);
 			return;
 		}
 		this.refreshVisual();
@@ -142,8 +149,52 @@ export class Enemy {
 		this.refreshVisual();
 	}
 
+	/** 每帧推进倭寇动画；阵亡后只倒在地上，倒完自行退场。 */
+	private tickAnim(dt: number): void {
+		const styleId = `enemy_${this.type}`;
+		const base = `enemy_${this.type.toLowerCase()}`;
+		let name = 'idle';
+		if (this.dead) {
+			name = 'fall';
+		} else if (this.attackTimer > 0) {
+			name = 'attack';
+		} else if (Math.abs(this.x - this.animPrevX) > 0.5) {
+			name = 'walk';
+		}
+		this.animPrevX = this.x;
+
+		let prefix = `${base}_${name}`;
+		let frames = artAnimCount(styleId, prefix);
+		if (frames === 0 && name !== 'walk') {
+			prefix = `${base}_walk`;
+			frames = artAnimCount(styleId, prefix);
+		}
+		if (frames === 0) {
+			prefix = base;
+			frames = artAnimCount(styleId, prefix);
+		}
+		if (frames === 0) {
+			artHide(this.artNode);
+			return;
+		}
+		this.animClock += dt;
+		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
+		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
+	}
+
 	public update(dt: number, villagers: Villager[]): void {
-		if (this.dead || this.escaped) return;
+		// 阵亡：只播倒地动画，倒完移除节点（敌人已从战斗逻辑中除名）
+		if (this.dead) {
+			if (this.dying > 0) {
+				this.dying = Math.max(0, this.dying - dt);
+				this.tickAnim(dt);
+				if (this.dying === 0) this.node.removeFromParent();
+			}
+			return;
+		}
+		if (this.escaped) return;
+
+		this.tickAnim(dt);
 
 		// 0. 收了银子就跑：头目只被撁住一阵，小兵直接掉头滚回海边
 		if (this.bribed) {

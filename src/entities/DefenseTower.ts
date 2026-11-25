@@ -1,6 +1,6 @@
 import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
 import { GameConfig } from 'src/config/GameConfig';
-import { TowerState } from 'src/config/GameState';
+import { GameState, TowerState } from 'src/config/GameState';
 import { Enemy } from 'src/entities/Enemy';
 import { artHide, artInto, artSprite } from 'src/config/Assets';
 import { playFx } from 'src/ui/Fx';
@@ -171,7 +171,10 @@ export class DefenseTower {
 		if (!target) return;
 
 		this.cooldownTimer = stats.cooldown;
-		const dmg = Math.round(stats.damage * (1 + 0.25 * (this.state.level - 1)));
+		// 宗祠士气亦鼓舞炮手：每级 +12% 威力
+		const dmg = Math.round(
+			stats.damage * (1 + 0.25 * (this.state.level - 1)) * (1 + GameState.instance.moraleBonus)
+		);
 		const speed = this.state.type === 'CANNON' ? 480 : 680;
 		const dist = Math.max(40, Math.abs(target.x - this.state.x));
 		const projArt = artSprite(this.state.type === 'CANNON' ? 'proj_cannonball' : 'proj_arrow');

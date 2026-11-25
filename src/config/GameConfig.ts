@@ -20,7 +20,8 @@ export type ProjectKind =
 	| 'HALL_UPGRADE'
 	| 'EAST_GATE_UPGRADE'
 	| 'TOWER_UNLOCK'
-	| 'TOWER_UPGRADE';
+	| 'TOWER_UPGRADE'
+	| 'HOUSE_UPGRADE';
 
 export type LandmarkId =
 	| 'DALUO_MOUNTAIN'
@@ -130,6 +131,7 @@ export const GameConfig = {
 	HOUSE_CAPACITY_PER_LEVEL: 2,
 	HOUSE_BASE_HP: 400,
 	// 民居升级：直接投银（一袋 40 两）
+	HOUSE_BUILD_COST: 120,
 	HOUSE_UPGRADE_COST_LV2: 160,
 	HOUSE_UPGRADE_COST_LV3: 360,
 	// 民居自然添丁：每间民居每过这么多秒添一名族丁（有空位且粮食够时）
@@ -173,6 +175,7 @@ export const GameConfig = {
 		INNER_GATE_REPAIR: 0,
 		TOWER_UNLOCK: 12,
 		TOWER_UPGRADE: 10,
+		HOUSE_UPGRADE: 12,
 	} as Record<ProjectKind, number>,
 	// 工期推进速率：基础自动推进 + 每名在场工匠加成，上限
 	BUILD_RATE_IDLE: 0.3,

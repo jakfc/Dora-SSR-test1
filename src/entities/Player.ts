@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
 import { GameConfig, LandmarkId } from 'src/config/GameConfig';
 import { Enemy } from 'src/entities/Enemy';
 import { Villager } from 'src/entities/Villager';
-import { artFace, artInto } from 'src/config/Assets';
+import { ANIM_FPS, artAnimCount, artAnimFace, artAnimInto, artHide, artReady } from 'src/config/Assets';
 import { playFx } from 'src/ui/Fx';
 
 function drawRect(
@@ -40,6 +40,8 @@ export class Player {
 	public rallyCooldownTimer = 0;
 	public auraTimer = 0;
 	private slashFxTimer = 0;
+	private animClock = 0;
+	private animPrevX: number = GameConfig.PLAYER.startX;
 
 	constructor() {
 		this.node = Node();
@@ -67,10 +69,8 @@ export class Player {
 
 	private redrawBody(): void {
 		this.bodyDraw.clear();
-		// 有美术素材时用精灵替掉方块小人，并按朝向镜像
-		const art = artInto(this.artNode, 'player_idle');
-		if (art !== undefined) {
-			artFace(art, 'player_idle', this.facing < 0);
+		// 有美术素材（静态单帧或逐帧动画）时用精灵替掉方块小人
+		if (artReady('player_idle') || artAnimCount('player_idle', 'player') > 0) {
 			return;
 		}
 		// 官袍躯干
@@ -114,7 +114,36 @@ export class Player {
 		}
 	}
 
+	/** 每帧推进主角动画：预步 / 普通攻击 / 行走 / 站立，缺帧逐级回退。 */
+	private tickAnim(dt: number): void {
+		const moving = Math.abs(this.x - this.animPrevX) > 0.5;
+		this.animPrevX = this.x;
+		let name = 'idle';
+		if (this.slashFxTimer > 0) name = this.auraTimer > 0 ? 'qilin' : 'attack';
+		else if (moving) name = 'walk';
+
+		let prefix = `player_${name}`;
+		let frames = artAnimCount('player_idle', prefix);
+		if (frames === 0 && name !== 'walk') {
+			prefix = 'player_attack';
+			frames = artAnimCount('player_idle', prefix);
+		}
+		if (frames === 0) {
+			prefix = 'player_idle';
+			frames = artAnimCount('player_idle', prefix);
+		}
+		if (frames === 0) {
+			artHide(this.artNode);
+			return;
+		}
+		this.animClock += dt;
+		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
+		artAnimInto(this.artNode, 'player_idle', prefix, this.animClock * fps);
+		artAnimFace(this.artNode, 'player_idle', this.facing < 0);
+	}
+
 	public update(dt: number, moveInput: number): LandmarkId | undefined {
+		this.tickAnim(dt);
 		if (this.attackCooldownTimer > 0) {
 			this.attackCooldownTimer = Math.max(0, this.attackCooldownTimer - dt);
 		}
