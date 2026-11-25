@@ -236,8 +236,12 @@ export class Player {
 
 		for (const v of villagers) {
 			if (v.dead) continue;
-			if (v.x > GameConfig.SAFE_LINE_X) {
-				v.orderRally(Math.min(this.x, GameConfig.SAFE_LINE_X - 80), 4.5);
+			if (v.x > GameConfig.MAP_LANDMARKS.EAST_GATE.x) {
+				// 城外的族人：直接召回内城水门之内的安全区（盐田/海岸很远，得跑一阵）
+				v.orderRally(
+					GameConfig.MAP_LANDMARKS.INNER_GATE.x - 60 + ((v.id % 5) - 2) * 22,
+					8.0
+				);
 				recalledCount++;
 			} else if (v.role === 'MILITIA' || v.role === 'KUNG_FU') {
 				v.orderRally(this.x, 3.0);

@@ -1,6 +1,6 @@
 import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
 import { GameConfig, VillagerRole } from 'src/config/GameConfig';
-import { GameState } from 'src/config/GameState';
+import { GameState, BuildProject } from 'src/config/GameState';
 import { Enemy } from 'src/entities/Enemy';
 import { artInto } from 'src/config/Assets';
 
@@ -14,11 +14,15 @@ export interface ToolDrop {
 
 export interface VillagerUpdateContext {
 	phase: 'DAY' | 'NIGHT';
+	dayTimer: number;
 	enemies: Enemy[];
 	tools: ToolDrop[];
+	projects: BuildProject[];
 	playerInAura: (x: number) => boolean;
 	onProduceResource: (kind: 'FOOD' | 'SILVER', amount: number, x: number) => void;
 	onRepairBuilding: (amount: number, x: number) => void;
+	onSaltGathered: (x: number) => void;
+	onCargoDropped: (x: number) => void;
 }
 
 function drawRect(
@@ -55,10 +59,13 @@ export class Villager {
 	public hp: number;
 	public maxHp: number;
 	public dead = false;
+	/** 灶户是否已经背着一擔盐（负盐跑得慢，路上被截会丢担） */
+	public carrying = false;
 
 	private wanderTargetX: number;
 	private rallyTargetX: number | undefined = undefined;
 	private rallyTimer = 0;
+	private saltTimer = 0;
 
 	private produceTimer = 0;
 	private attackTimer = 0;
@@ -102,6 +109,8 @@ export class Villager {
 		this.produceTimer = 0;
 		this.attackTimer = 0;
 		this.attackCount = 0;
+		this.carrying = false;
+		this.saltTimer = 0;
 		this.refreshVisual();
 	}
 
@@ -128,7 +137,7 @@ export class Villager {
 		this.refreshVisual();
 	}
 
-	private refreshVisual(): void {
+	public refreshVisual(): void {
 		const cfg = GameConfig.ROLES[this.role];
 		this.bodyDraw.clear();
 		// 有美术素材时按职业换精灵
@@ -137,6 +146,11 @@ export class Villager {
 			drawRect(this.bodyDraw, -11, 0, 22, 40, cfg.color, 0xff1a202c);
 			// 头部
 			drawRect(this.bodyDraw, -7, 40, 14, 12, 0xfffbd38d);
+		}
+		// 背上的一擔盐（灶户负盐状态）
+		if (this.carrying) {
+			drawRect(this.bodyDraw, -19, 24, 13, 15, 0xffe2e8f0, 0xff4a5568);
+			drawRect(this.bodyDraw, -19, 37, 13, 3, 0xffd6b36a);
 		}
 		// 武师拳气特效
 		if (this.shockwaveTimer > 0) {
@@ -148,12 +162,12 @@ export class Villager {
 			drawRect(this.bodyDraw, -14, 54, 28, 4, 0xff2d3748);
 			drawRect(this.bodyDraw, -14, 54, 28 * pct, 4, 0xff48bb78);
 		}
-		this.roleLabel.text = cfg.name.slice(0, 4);
-		this.roleLabel.color = Color(0xffe2e8f0);
+		this.roleLabel.text = this.carrying ? '灶户·负盐' : cfg.name.slice(0, 4);
+		this.roleLabel.color = Color(this.carrying ? 0xfff6e05e : 0xffe2e8f0);
 	}
 
-	private moveToward(targetX: number, dt: number): boolean {
-		const speed = GameConfig.ROLES[this.role].moveSpeed;
+	private moveToward(targetX: number, dt: number, speedScale = 1): boolean {
+		const speed = GameConfig.ROLES[this.role].moveSpeed * speedScale;
 		const diff = targetX - this.x;
 		if (Math.abs(diff) <= 6) {
 			return true;
@@ -184,13 +198,15 @@ export class Villager {
 			return;
 		}
 
-		switch (this.role) {
+			switch (this.role) {
 			case 'IDLE':
 				this.updateIdle(dt, ctx);
 				break;
 			case 'FARMER':
+				this.updateFarmer(dt, ctx);
+				break;
 			case 'SALT_WORKER':
-				this.updateProducer(dt, ctx);
+				this.updateSaltWorker(dt, ctx);
 				break;
 			case 'BUILDER':
 				this.updateBuilder(dt, ctx);
@@ -235,38 +251,116 @@ export class Villager {
 		}
 	}
 
-	private updateProducer(dt: number, ctx: VillagerUpdateContext): void {
-		const isFarmer = this.role === 'FARMER';
+	private updateFarmer(dt: number, ctx: VillagerUpdateContext): void {
 		if (ctx.phase === 'NIGHT') {
 			const shelterX = GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x + ((this.id % 5) - 2) * 20;
-			this.moveToward(shelterX, dt);
+			this.moveToward(shelterX, dt, GameConfig.SALT_FETCH.panicSpeedScale);
 			return;
 		}
 
-		const workX =
-			(isFarmer
-				? GameConfig.MAP_LANDMARKS.PADDY_FIELD.x
-				: GameConfig.MAP_LANDMARKS.SALT_OFFICE.x) +
-			((this.id % 5) - 2) * 22;
-
+		const workX = GameConfig.MAP_LANDMARKS.PADDY_FIELD.x + ((this.id % 5) - 2) * 22;
 		if (this.moveToward(workX, dt)) {
-			const cfg = GameConfig.ROLES[this.role];
+			const cfg = GameConfig.ROLES.FARMER;
 			this.produceTimer += dt;
 			if (this.produceTimer >= cfg.produceInterval) {
 				this.produceTimer -= cfg.produceInterval;
-				if (isFarmer) {
-					GameState.instance.addFood(cfg.produceAmount);
-					ctx.onProduceResource('FOOD', cfg.produceAmount, this.x);
-				} else {
-					GameState.instance.addSilver(cfg.produceAmount);
-					ctx.onProduceResource('SILVER', cfg.produceAmount, this.x);
+				GameState.instance.addFood(cfg.produceAmount);
+				ctx.onProduceResource('FOOD', cfg.produceAmount, this.x);
+			}
+		}
+	}
+
+	/**
+	 * 灶户取盐：出城到盐田装盐 -> 背盐回盐课司入库（一趟 120 银）。
+	 * 负盐跑得慢，黄昏/入夜自动往回赶；赶不回来就会死在城外，盐担也会失落。
+	 */
+	private updateSaltWorker(dt: number, ctx: VillagerUpdateContext): void {
+		const cfg = GameConfig.ROLES.SALT_WORKER;
+		const hallX = GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x + ((this.id % 5) - 2) * 20;
+		const officeX = GameConfig.MAP_LANDMARKS.SALT_OFFICE.x + ((this.id % 5) - 2) * 24;
+		const yardX = GameConfig.MAP_LANDMARKS.OUTER_SALT_FLAT.x + ((this.id % 7) - 3) * 90;
+		const isNight = ctx.phase === 'NIGHT';
+
+		// 入库结算
+		const deposit = () => {
+			const gain = GameConfig.SALT_FETCH.tripSilver;
+			GameState.instance.addSilver(gain);
+			ctx.onProduceResource('SILVER', gain, this.x);
+			this.carrying = false;
+			this.saltTimer = 0;
+			this.refreshVisual();
+		};
+
+		if (isNight) {
+			// 天黑后往内城狂奔；背着一担盐跑得更慢，近处有倭寇就会弃担逃命
+			if (this.carrying) {
+				let threat = Infinity;
+				for (const e of ctx.enemies) {
+					if (e.dead) continue;
+					const d = Math.abs(e.x - this.x);
+					if (d < threat) threat = d;
 				}
+				if (threat < GameConfig.SALT_FETCH.dropSaltThreatRange) {
+					this.carrying = false;
+					this.refreshVisual();
+					ctx.onCargoDropped(this.x);
+				}
+			}
+			const fleeScale =
+				GameConfig.SALT_FETCH.panicSpeedScale *
+				(this.carrying ? GameConfig.SALT_FETCH.carrySpeedScale : 1);
+			if (this.moveToward(hallX, dt, fleeScale) && this.carrying) {
+				deposit();
+			}
+			return;
+		}
+
+		if (this.carrying) {
+			if (this.moveToward(officeX, dt, GameConfig.SALT_FETCH.carrySpeedScale)) {
+				deposit();
+			}
+			return;
+		}
+
+		// 掂量一下来回脚程：只留 25% 余量就敢再跑一趟（撑不住就会被天黑吃掉）
+		const tripTime =
+			(Math.abs(yardX - officeX) * 2) / cfg.moveSpeed + GameConfig.SALT_FETCH.gatherSeconds;
+		if (ctx.dayTimer <= tripTime * 0.75) {
+			this.moveToward(officeX, dt);
+			return;
+		}
+
+		if (this.moveToward(yardX, dt)) {
+			this.saltTimer += dt;
+			if (this.saltTimer >= GameConfig.SALT_FETCH.gatherSeconds) {
+				this.saltTimer = 0;
+				this.carrying = true;
+				this.refreshVisual();
+				ctx.onSaltGathered(this.x);
 			}
 		}
 	}
 
 	private updateBuilder(dt: number, ctx: VillagerUpdateContext): void {
 		const gs = GameState.instance;
+		const eastGateX = GameConfig.MAP_LANDMARKS.EAST_GATE.x;
+
+		// 0. 有在建工程时优先赶去工地（进度由主循环按在场工匠数推进）
+		let site: BuildProject | undefined = undefined;
+		let siteDist = Infinity;
+		for (const p of ctx.projects) {
+			if (ctx.phase === 'NIGHT' && p.x > eastGateX) continue; // 夜里不冒险出城施工
+			const d = Math.abs(p.x - this.x);
+			if (d < siteDist) {
+				siteDist = d;
+				site = p;
+			}
+		}
+		if (site !== undefined) {
+			this.moveToward(site.x + ((this.id % 3) - 1) * 26, dt);
+			return;
+		}
+
 		const eastBreached = gs.eastGateHp <= 0 || (ctx.phase === 'NIGHT' && gs.eastGateOpen);
 		const maxSafeX = eastBreached ? GameConfig.MAP_LANDMARKS.INNER_GATE.x : GameConfig.MAP_LANDMARKS.EAST_GATE.x;
 

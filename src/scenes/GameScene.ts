@@ -1,9 +1,9 @@
 import { Color, DrawNode, KeyName, Keyboard, Label, Node, Size, Sprite, Vec2 } from 'Dora';
 import { SceneManager } from 'src/scenes/SceneManager';
-import { EnemyType, GameConfig, LandmarkId, VillagerRole } from 'src/config/GameConfig';
+import { EnemyType, GameConfig, LandmarkId, ProjectKind, VillagerRole } from 'src/config/GameConfig';
 import { Screen } from 'src/config/Screen';
 import { artAt, artInto, artStretch } from 'src/config/Assets';
-import { GameState } from 'src/config/GameState';
+import { GameState, BuildProject } from 'src/config/GameState';
 import { DefenseTower } from 'src/entities/DefenseTower';
 import { Enemy } from 'src/entities/Enemy';
 import { Player } from 'src/entities/Player';
@@ -21,6 +21,15 @@ interface ScavengeDrop {
 interface PendingSpawn {
 	enemyType: EnemyType;
 	triggerTime: number;
+}
+
+/** 工地可视化：进度条 + 抡锤动画 */
+interface ProjectView {
+	p: BuildProject;
+	node: Node.Type;
+	bar: DrawNode.Type;
+	label: Label.Type;
+	hammer: Sprite.Type | undefined;
 }
 
 interface FloatingText {
@@ -112,7 +121,7 @@ export function GameScene(): Node.Type {
 	// 远景剪影贴图：横向平铺，隔块镜像以缓解重复感
 	if (artAt(farLayer, 'horizon', 0, GameConfig.GROUND_Y) !== undefined) {
 		farDraw.clear();
-		for (let i = 1; i < 3; i++) {
+		for (let i = 1; i < 5; i++) {
 			const flip = i % 2 === 1;
 			const tile = artAt(farLayer, 'horizon', i * 1280 + (flip ? 1280 : 0), GameConfig.GROUND_Y);
 			if (tile !== undefined && flip) tile.scaleX = -1;
@@ -129,30 +138,35 @@ export function GameScene(): Node.Type {
 
 	// 中景贴图：堡内村舍屋影，横向平铺盖住程序化色块
 	if (artAt(midLayer, 'mid_houses', 0, GameConfig.GROUND_Y) !== undefined) {
-		artAt(midLayer, 'mid_houses', 1280, GameConfig.GROUND_Y);
-		artAt(midLayer, 'mid_houses', 2560, GameConfig.GROUND_Y);
+		for (let i = 1; i * 1280 < GameConfig.MAP_WIDTH; i++) {
+			artAt(midLayer, 'mid_houses', i * 1280, GameConfig.GROUND_Y);
+		}
 		midDraw.clear();
 	}
 
 	// 主战场地面与地标建筑
 	const groundDraw = DrawNode();
 	drawRect(groundDraw, 0, 0, GameConfig.MAP_WIDTH, GameConfig.GROUND_Y, 0xff3b3026);
-	// 堡内石板路 (0 ~ 2400) 与城外滩涂 (2400 ~ 3600)
-	drawRect(groundDraw, 0, GameConfig.GROUND_Y - 14, 2400, 14, 0xff718096);
-	drawRect(groundDraw, 2400, GameConfig.GROUND_Y - 14, 1100, 14, 0xffb79f78);
-	drawRect(groundDraw, 3460, 0, 140, GameConfig.GROUND_Y, 0xff1e4e79);
+	// 堡内石板路 (0 ~ 2560) 与城外滩涂 / 盐田 (2560 ~ 海)
+	const cityGroundW = 2560;
+	const seaStart = GameConfig.MAP_LANDMARKS.COAST_SPAWN.x - 260;
+	drawRect(groundDraw, 0, GameConfig.GROUND_Y - 14, cityGroundW, 14, 0xff718096);
+	drawRect(groundDraw, cityGroundW, GameConfig.GROUND_Y - 14, seaStart - cityGroundW, 14, 0xffb79f78);
+	drawRect(groundDraw, seaStart, 0, GameConfig.MAP_WIDTH - seaStart, GameConfig.GROUND_Y, 0xff1e4e79);
 	worldLayer.addChild(groundDraw);
 
 	// 地面 / 滩涂贴图：横向平铺（有素材时盖住程序化地面）
 	const groundArtNode = Node();
 	worldLayer.addChild(groundArtNode);
 	if (artAt(groundArtNode, 'ground_city', 0, 0) !== undefined) {
-		for (let i = 1; i < 4; i++) artAt(groundArtNode, 'ground_city', i * 640, 0);
-		for (let i = 0; i < 2; i++) artAt(groundArtNode, 'ground_beach', 2400 + i * 640, 0);
+		for (let i = 1; i * 640 < cityGroundW; i++) artAt(groundArtNode, 'ground_city', i * 640, 0);
+		for (let x = cityGroundW; x < GameConfig.MAP_WIDTH; x += 640) {
+			artAt(groundArtNode, 'ground_beach', x, 0);
+		}
 		groundDraw.clear();
 		// 最右侧海面
 		const seaDraw = DrawNode();
-		drawRect(seaDraw, 3460, 0, 140, GameConfig.GROUND_Y, 0xff1e4e79);
+		drawRect(seaDraw, seaStart, 0, GameConfig.MAP_WIDTH - seaStart, GameConfig.GROUND_Y, 0xff1e4e79);
 		worldLayer.addChild(seaDraw);
 	}
 
@@ -294,6 +308,28 @@ export function GameScene(): Node.Type {
 		playFx(worldLayer, 'fx_recruit', x, GameConfig.GROUND_Y + 60, 0.45, 0.25, 14);
 	};
 
+	const spawnScavenge = (x: number, kind: 'SALT' | 'WOOD') => {
+		const sNode = Node();
+		sNode.x = x;
+		sNode.y = GameConfig.GROUND_Y;
+
+		const scavengeArtId = kind === 'SALT' ? 'salvage_salt_bag' : 'salvage_driftwood';
+		if (artAt(sNode, scavengeArtId, 0, 0) === undefined) {
+			const d = DrawNode();
+			drawRect(d, -12, 2, 24, 20, kind === 'SALT' ? 0xffe2e8f0 : 0xff9c6644, 0xff1a202c);
+			sNode.addChild(d);
+		}
+
+		const l = Label('sarasa-mono-sc-regular', 12) as Label.Type;
+		l.text = kind === 'SALT' ? '无主盐包' : '漂流木料';
+		l.y = 32;
+		l.color = Color(0xfffefcbf);
+		sNode.addChild(l);
+
+		worldLayer.addChild(sNode);
+		scavenges.push({ x, kind, collected: false, node: sNode });
+	};
+
 	const spawnDailyScavenges = () => {
 		// 清理旧的未拾取物资
 		for (const s of scavenges) {
@@ -301,40 +337,14 @@ export function GameScene(): Node.Type {
 		}
 		scavenges.length = 0;
 
-		for (let i = 0; i < GameConfig.SCAVENGE_COUNT_PER_DAY; i++) {
-			const x =
-				GameConfig.OUTER_ZONE_MIN_X +
-				100 +
-				i * 135 +
-				((gs.day * 29 + i * 41) % 60);
-			const kind: 'SALT' | 'WOOD' = i % 2 === 0 ? 'SALT' : 'WOOD';
-			const sNode = Node();
-			sNode.x = x;
-			sNode.y = GameConfig.GROUND_Y;
-
-			const scavengeArtId = kind === 'SALT' ? 'salvage_salt_bag' : 'salvage_driftwood';
-			if (artAt(sNode, scavengeArtId, 0, 0) === undefined) {
-				const d = DrawNode();
-				drawRect(
-					d,
-					-12,
-					2,
-					24,
-					20,
-					kind === 'SALT' ? 0xffe2e8f0 : 0xff9c6644,
-					0xff1a202c
-				);
-				sNode.addChild(d);
-			}
-
-			const l = Label('sarasa-mono-sc-regular', 12) as Label.Type;
-			l.text = kind === 'SALT' ? '无主盐包' : '漂流木料';
-			l.y = 32;
-			l.color = Color(0xfffefcbf);
-			sNode.addChild(l);
-
-			worldLayer.addChild(sNode);
-			scavenges.push({ x, kind, collected: false, node: sNode });
+		// 城外拾荒带拉长：从东门外的盐田滩涂一直铺到海岸
+		const count = GameConfig.SCAVENGE_COUNT_PER_DAY;
+		const spanMin = GameConfig.OUTER_ZONE_MIN_X + 150;
+		const spanMax = GameConfig.OUTER_ZONE_MAX_X - 150;
+		for (let i = 0; i < count; i++) {
+			const base = spanMin + ((spanMax - spanMin) * i) / Math.max(1, count - 1);
+			const x = base + ((gs.day * 29 + i * 41) % 60);
+			spawnScavenge(x, i % 2 === 0 ? 'SALT' : 'WOOD');
 		}
 	};
 	spawnDailyScavenges();
@@ -343,6 +353,11 @@ export function GameScene(): Node.Type {
 	let nightElapsed = 0;
 	let foodConsumeTimer = 0;
 	let waitingVictoryModal = false;
+	// 黄昏未归警告：每昼夜只弹一次
+	let curfewWarnedDay = 0;
+	// TEMP 验证探针
+	let probeTimer = 1.0;
+	let probeSeeded = false;
 	let cameraX = GameConfig.CAMERA_MIN_X;
 
 	const refreshEnvironmentVisuals = () => {
@@ -376,8 +391,8 @@ export function GameScene(): Node.Type {
 
 		if (gs.phase === 'NIGHT') {
 			drawRect(nightMaskDraw, 0, 0, Screen.width, Screen.height, 0x440b1426);
-			// 城墙火把与敌台灯笼
-			const torchXs = [400, 800, 1200, 1600, 2000, 2360, 2400];
+			// 城墙火把与敌台灯笼（含盐田新敌台）
+			const torchXs = [460, 860, 1260, 1660, 2060, 2420, 3300];
 			for (const tx of torchXs) {
 				if (artAt(torchArtNode, 'fx_torch_glow', tx, GameConfig.GROUND_Y + 95) === undefined) {
 					torchDraw.drawDot(Vec2(tx, GameConfig.GROUND_Y + 95), 14, Color(0x88f6ad55));
@@ -478,6 +493,143 @@ export function GameScene(): Node.Type {
 		}
 	};
 
+	// ---- 营建工程：读秒施工 + 工地可视化 ----
+	const projectLayer = Node();
+	projectLayer.anchor = Vec2(0, 0);
+	projectLayer.size = Size(GameConfig.MAP_WIDTH, Screen.height);
+	worldLayer.addChild(projectLayer);
+	const projectViews: ProjectView[] = [];
+
+	/** 工地可视化：进度条 + 抡锤动画 + 敲出火花 */
+	const syncProjectViews = (dt: number) => {
+		for (let i = projectViews.length - 1; i >= 0; i--) {
+			if (gs.projects.indexOf(projectViews[i].p) < 0) {
+				projectViews[i].node.removeFromParent();
+				projectViews.splice(i, 1);
+			}
+		}
+
+		for (const p of gs.projects) {
+			let view: ProjectView | undefined = undefined;
+			for (const v of projectViews) {
+				if (v.p === p) view = v;
+			}
+			if (view === undefined) {
+				const node = Node();
+				node.x = p.x;
+				node.y = GameConfig.GROUND_Y + p.targetLevel * 2;
+				const bar = DrawNode();
+				node.addChild(bar);
+				const label = Label('sarasa-mono-sc-regular', 12) as Label.Type;
+				label.y = 28;
+				label.color = Color(0xff9ae6b4);
+				node.addChild(label);
+				const hammer = artAt(node, 'icon_tool_hammer', 56, 8);
+				if (hammer !== undefined) {
+					hammer.anchor = Vec2(0.5, 0.5);
+					hammer.size = Size(30, 30);
+				}
+				worldLayer.addChild(node);
+				view = { p, node, bar, label, hammer };
+				projectViews.push(view);
+			}
+
+			const pct = Math.max(0, Math.min(1, 1 - p.remain / Math.max(0.001, p.total)));
+			view.bar.clear();
+			drawRect(view.bar, -46, -10, 92, 10, 0xcc1a202c, 0xff4a5568);
+			drawRect(view.bar, -45, -9, 90 * pct, 8, 0xff48bb78);
+			view.label.text = `${p.label} ${Math.floor(pct * 100)}%${p.workers > 0 ? ` · 匠${p.workers}` : ' · 无匠'}`;
+
+			// 工匠在场才抡锤，抡得快慢随人数
+			if (view.hammer !== undefined && p.workers > 0) {
+				const swing = Math.abs(Math.sin(p.hammerTimer * (6 + p.workers * 2)));
+				view.hammer.angle = 40 - swing * 80;
+			}
+			if (p.workers > 0 && Math.random() < dt * 3) {
+				playFx(worldLayer, 'fx_arrow_hit', p.x + 30, GameConfig.GROUND_Y + 22, 0.26, 0.35, 8);
+			}
+		}
+	};
+
+	/** 工程竣工结算（等级 / 耐久 / 贴图 / 特效） */
+	const completeProject = (p: BuildProject) => {
+		if (p.kind === 'HALL_UPGRADE') {
+			gs.ancestralHallLevel++;
+			gs.ancestralHallMaxHp += GameConfig.ANCESTRAL_HALL_HP_PER_LEVEL;
+			gs.ancestralHallHp = Math.min(
+				gs.ancestralHallMaxHp,
+				gs.ancestralHallHp + GameConfig.ANCESTRAL_HALL_HP_PER_LEVEL
+			);
+			refreshEnvironmentVisuals();
+			playFx(
+				worldLayer,
+				'fx_levelup',
+				GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x,
+				GameConfig.GROUND_Y + 90,
+				0.7,
+				0.35,
+				26
+			);
+			hud.showToast(
+				`王氏宗祠竣工，升至 Lv.${gs.ancestralHallLevel}！人口上限 ${gs.maxPopulation}。`,
+				2.6
+			);
+			return;
+		}
+
+		if (p.kind === 'EAST_GATE_UPGRADE') {
+			gs.eastGateLevel++;
+			gs.eastGateMaxHp += 350;
+			gs.eastGateHp = gs.eastGateMaxHp;
+			refreshEnvironmentVisuals();
+			playFx(
+				worldLayer,
+				'fx_levelup',
+				GameConfig.MAP_LANDMARKS.EAST_GATE.x,
+				GameConfig.GROUND_Y + 120,
+				0.7,
+				0.35,
+				26
+			);
+			hud.showToast(`东门瓮城加固竣工，升至 Lv.${gs.eastGateLevel}！`, 2.4);
+			return;
+		}
+
+		let tower: DefenseTower | undefined = undefined;
+		for (const t of towers) {
+			if (t.state.id === p.towerId) tower = t;
+		}
+		if (tower === undefined) return;
+		if (p.kind === 'TOWER_UNLOCK') {
+			tower.state.unlocked = true;
+		} else {
+			tower.state.level++;
+			tower.state.maxHp += 120;
+			tower.state.hp = tower.state.maxHp;
+		}
+		tower.refreshVisual();
+		playFx(worldLayer, 'fx_levelup', tower.state.x, GameConfig.GROUND_Y + 90, 0.7, 0.35, 24);
+		hud.showToast(`${p.label}竣工！`, 2.2);
+	};
+
+	/** 发起一项营建工程：白银当场扣除，效果等工期走完才生效 */
+	const beginProject = (
+		kind: ProjectKind,
+		label: string,
+		x: number,
+		seconds: number,
+		targetLevel: number,
+		towerId = ''
+	): boolean => {
+		if (gs.hasProject(kind, towerId)) {
+			hud.showToast(`「${label}」已在施工中，等候工匠完工。`, 2.0);
+			return false;
+		}
+		gs.startProject(kind, label, x, seconds, targetLevel, towerId);
+		hud.showToast(GameConfig.HISTORICAL_QUOTES.PROJECT_STARTED, 2.4);
+		return true;
+	};
+
 	const startNightPhase = () => {
 		if (gs.phase === 'NIGHT') return;
 		gs.phase = 'NIGHT';
@@ -520,29 +672,46 @@ export function GameScene(): Node.Type {
 					return;
 				}
 				const cost = GameConfig.ANCESTRAL_HALL_UPGRADE_BASE_COST * gs.ancestralHallLevel;
+				if (gs.hasProject('HALL_UPGRADE')) {
+					hud.showToast('宗祠正在施工中，等候工匠完工。', 2.0);
+					return;
+				}
 				if (!gs.spendSilver(cost)) {
 					hud.showToast(`升级宗祠需 ${cost} 白银！`, 2.0);
 					return;
 				}
-		gs.ancestralHallLevel++;
-		gs.ancestralHallMaxHp += 300;
-		gs.ancestralHallHp = Math.min(gs.ancestralHallMaxHp, gs.ancestralHallHp + 300);
-		refreshEnvironmentVisuals();
-		playFx(worldLayer, 'fx_levelup', GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x, GameConfig.GROUND_Y + 90, 0.65, 0.35, 24);
-		hud.showToast(`宗祠升至 Lv.${gs.ancestralHallLevel}，人口上限提升至 ${gs.maxPopulation}！`, 2.5);
+				// 等级越高工期越长（+20%/级）
+				const hallSeconds =
+					GameConfig.CONSTRUCTION_SECONDS.HALL_UPGRADE * (1 + 0.2 * (gs.ancestralHallLevel - 1));
+				beginProject(
+					'HALL_UPGRADE',
+					`宗祠 Lv.${gs.ancestralHallLevel + 1}`,
+					GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x,
+					hallSeconds,
+					gs.ancestralHallLevel + 1
+				);
 				return;
 			}
 
-			if (gs.populationCount >= gs.maxPopulation) {
+			if (
+				gs.populationCount + gs.recruits.length >= gs.maxPopulation
+			) {
 				hud.showToast('人口已达上限，请升级王氏宗祠！', 2.0);
+				return;
+			}
+			if (gs.recruits.length >= GameConfig.RECRUIT_MAX_PENDING) {
+				hud.showToast('已有族人正在赶来报到的路上，稍候。', 2.0);
 				return;
 			}
 			if (!gs.spendSilver(GameConfig.RECRUIT_VILLAGER_COST)) {
 				hud.showToast(`招募族丁需 ${GameConfig.RECRUIT_VILLAGER_COST} 白银！`, 2.0);
 				return;
 			}
-			spawnVillager(GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x + 30, 'IDLE');
-			addFloatingText('+1 族丁', GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x, GameConfig.GROUND_Y + 120);
+			gs.startRecruit();
+			hud.showToast(
+				`已递帖招揽族人，${GameConfig.RECRUIT_SECONDS.toFixed(0)} 秒后到宗祠报到。`,
+				2.0
+			);
 		} else if (landmark === 'PADDY_FIELD') {
 			const cost = GameConfig.ROLES.FARMER.toolCost;
 			if (!gs.spendSilver(cost)) {
@@ -565,25 +734,40 @@ export function GameScene(): Node.Type {
 				if (!innerTower) return;
 				if (!innerTower.state.unlocked) {
 					const cost = 150;
-					if (!gs.spendSilver(cost)) {
-						hud.showToast(`解锁内城佛郎机炮台需 ${cost} 白银！`, 2.0);
+					if (gs.hasProject('TOWER_UNLOCK', 'INNER_TOWER')) {
+						hud.showToast('内城炮台正在施工中。', 2.0);
 						return;
 					}
-					innerTower.state.unlocked = true;
-					innerTower.refreshVisual();
-					playFx(worldLayer, 'fx_levelup', innerTower.state.x, GameConfig.GROUND_Y + 90, 0.65, 0.35, 24);
-					hud.showToast('内城佛郎机炮台已建成！', 2.5);
+					if (!gs.spendSilver(cost)) {
+						hud.showToast(`石库炮台基石需 ${cost} 白银（须工匠施工）！`, 2.0);
+						return;
+					}
+					beginProject(
+						'TOWER_UNLOCK',
+						'内城佛郎机炮台',
+						innerTower.state.x,
+						GameConfig.CONSTRUCTION_SECONDS.TOWER_UNLOCK,
+						1,
+						'INNER_TOWER'
+					);
 				} else {
 					const cost = GameConfig.TOWER_STATS.CANNON.upgradeCost;
+					if (gs.hasProject('TOWER_UPGRADE', 'INNER_TOWER')) {
+						hud.showToast('炮台正在升级中。', 2.0);
+						return;
+					}
 					if (!gs.spendSilver(cost)) {
 						hud.showToast(`升级炮台需 ${cost} 白银！`, 2.0);
 						return;
 					}
-					innerTower.state.level++;
-					innerTower.state.maxHp += 120;
-					innerTower.state.hp = innerTower.state.maxHp;
-					innerTower.refreshVisual();
-					hud.showToast(`内城炮台升至 Lv.${innerTower.state.level}！`, 2.2);
+					beginProject(
+						'TOWER_UPGRADE',
+						`内城炮台 Lv.${innerTower.state.level + 1}`,
+						innerTower.state.x,
+						GameConfig.CONSTRUCTION_SECONDS.TOWER_UPGRADE,
+						innerTower.state.level + 1,
+						'INNER_TOWER'
+					);
 				}
 				return;
 			}
@@ -611,15 +795,23 @@ export function GameScene(): Node.Type {
 					return;
 				}
 				const cost = GameConfig.EAST_GATE_UPGRADE_BASE_COST * gs.eastGateLevel;
+				if (gs.hasProject('EAST_GATE_UPGRADE')) {
+					hud.showToast('东门瓮城正在加固中。', 2.0);
+					return;
+				}
 				if (!gs.spendSilver(cost)) {
 					hud.showToast(`加固东门需 ${cost} 白银！`, 2.0);
 					return;
 				}
-				gs.eastGateLevel++;
-				gs.eastGateMaxHp += 350;
-				gs.eastGateHp = gs.eastGateMaxHp;
-				hud.showToast(`东门瓮城加固至 Lv.${gs.eastGateLevel}！`, 2.5);
-				refreshEnvironmentVisuals();
+				const gateSeconds =
+					GameConfig.CONSTRUCTION_SECONDS.EAST_GATE_UPGRADE * (1 + 0.15 * (gs.eastGateLevel - 1));
+				beginProject(
+					'EAST_GATE_UPGRADE',
+					`东门 Lv.${gs.eastGateLevel + 1}`,
+					GameConfig.MAP_LANDMARKS.EAST_GATE.x,
+					gateSeconds,
+					gs.eastGateLevel + 1
+				);
 				return;
 			}
 
@@ -630,6 +822,39 @@ export function GameScene(): Node.Type {
 			gs.eastGateOpen = !gs.eastGateOpen;
 			hud.showToast(gs.eastGateOpen ? '东门已开启，族丁可出城拾荒。' : '东门已关闭，瓮城严阵以待！', 2.0);
 			refreshEnvironmentVisuals();
+		} else if (landmark === 'OUTER_SALT_FLAT') {
+			if (optionIndex === 1) {
+				const saltTower = towers.find((t) => t.state.id === 'SALT_TOWER');
+				if (!saltTower) return;
+				if (gs.hasProject('TOWER_UNLOCK', 'SALT_TOWER')) {
+					hud.showToast('盐田敌台正在施工中。', 2.0);
+					return;
+				}
+				const cost = 220;
+				if (!gs.spendSilver(cost)) {
+					hud.showToast(`筑盐田敌台需 ${cost} 白银（须工匠施工）！`, 2.0);
+					return;
+				}
+				beginProject(
+					'TOWER_UNLOCK',
+					'盐田敌台',
+					saltTower.state.x,
+					GameConfig.CONSTRUCTION_SECONDS.TOWER_UNLOCK,
+					1,
+					'SALT_TOWER'
+				);
+				return;
+			}
+			let saltCount = 0;
+			for (const v of villagers) {
+				if (!v.dead && v.role === 'SALT_WORKER') saltCount++;
+			}
+			hud.showToast(
+				`灶户 ${saltCount} 名往来盐田背盐（每趟 ${GameConfig.SALT_FETCH.tripSilver} 银），天黑前务必召回！`,
+				3.0
+			);
+		} else if (landmark === 'COAST_SPAWN') {
+			hud.showToast('东海前哨：倭寇由此登岸，天亮后便会涌入城外。', 2.6);
 		}
 	};
 
@@ -798,12 +1023,33 @@ export function GameScene(): Node.Type {
 			}
 		}
 
+		// 4.5 营建工程：先按在场工匠数推进工期，再结算完工
+		for (const p of gs.projects) p.workers = 0;
+		for (const v of villagers) {
+			if (v.dead || v.role !== 'BUILDER') continue;
+			let best: BuildProject | undefined = undefined;
+			let bestDist = GameConfig.BUILD_SITE_RADIUS;
+			for (const p of gs.projects) {
+				const d = Math.abs(p.x - v.x);
+				if (d <= bestDist) {
+					bestDist = d;
+					best = p;
+				}
+			}
+			if (best !== undefined) best.workers++;
+		}
+		const finishedProjects = gs.tickProjects(clampedDt);
+		for (const p of finishedProjects) completeProject(p);
+		syncProjectViews(clampedDt);
+
 		// 5. 更新所有实体
 		for (const v of villagers) {
 			v.update(clampedDt, {
 				phase: gs.phase,
+				dayTimer: gs.dayTimer,
 				enemies,
 				tools,
+				projects: gs.projects,
 				playerInAura: (vx) => player.isInAura(vx),
 				onProduceResource: (kind, amount, vx) => {
 					addFloatingText(
@@ -812,16 +1058,55 @@ export function GameScene(): Node.Type {
 						GameConfig.GROUND_Y + 72,
 						kind === 'FOOD' ? 0xff68d391 : 0xfff6e05e
 					);
+					if (kind === 'SILVER' && amount >= GameConfig.SALT_FETCH.tripSilver) {
+						addFloatingText(
+							GameConfig.HISTORICAL_QUOTES.SALT_HAUL_ARRIVED,
+							vx,
+							GameConfig.GROUND_Y + 96,
+							0xffe2e8f0
+						);
+					}
 				},
 				onRepairBuilding: (amount, vx) => {
 					addFloatingText(`+${amount} 修筑`, vx, GameConfig.GROUND_Y + 72, 0xff63b3ed);
 				},
+				onSaltGathered: (vx) => {
+					addFloatingText('装满盐担', vx, GameConfig.GROUND_Y + 72, 0xffe2e8f0);
+					playFx(worldLayer, 'fx_recruit', vx, GameConfig.GROUND_Y + 46, 0.3, 0.3, 6);
+				},
+				onCargoDropped: (vx) => {
+					spawnScavenge(vx, 'SALT');
+					addFloatingText('弃担逃命！', vx, GameConfig.GROUND_Y + 72, 0xfffc8181);
+				},
 			});
 		}
 
-		// 清理阵亡族丁并同步快照
+		// 5.2 招募读秒：到岗即生成族丁
+		const arrivedRecruits = gs.tickRecruits(clampedDt);
+		for (let i = 0; i < arrivedRecruits; i++) {
+			spawnVillager(GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x + 30, 'IDLE');
+			addFloatingText(
+				'+1 族丁',
+				GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x,
+				GameConfig.GROUND_Y + 120,
+				0xff9ae6b4
+			);
+		}
+
+		// 清理阵亡族丁并同步快照（背着盐被杀 → 盐担失落城外）
 		for (let i = villagers.length - 1; i >= 0; i--) {
-			if (villagers[i].dead) villagers.splice(i, 1);
+			const v = villagers[i];
+			if (!v.dead) continue;
+			if (v.carrying) {
+				spawnScavenge(v.x, 'SALT');
+				addFloatingText(
+					GameConfig.HISTORICAL_QUOTES.SALT_HAUL_LOST,
+					v.x,
+					GameConfig.GROUND_Y + 80,
+					0xfffc8181
+				);
+			}
+			villagers.splice(i, 1);
 		}
 		gs.villagers = villagers.map((v) => ({
 			id: v.id,
@@ -875,6 +1160,56 @@ export function GameScene(): Node.Type {
 			hud.showVictoryModal(wave);
 		}
 
+		// 6.5 城外未归人数：黄昏看东门之外，入夜看内城水门之外
+		let stragglers = 0;
+		const safeLineX =
+			gs.phase === 'NIGHT'
+				? GameConfig.MAP_LANDMARKS.INNER_GATE.x
+				: GameConfig.MAP_LANDMARKS.EAST_GATE.x;
+		for (const v of villagers) {
+			if (!v.dead && v.x > safeLineX) stragglers++;
+		}
+		if (
+			gs.phase === 'DAY' &&
+			gs.dayTimer <= GameConfig.DUSK_RETURN_SECONDS &&
+			stragglers > 0 &&
+			curfewWarnedDay !== gs.day
+		) {
+			curfewWarnedDay = gs.day;
+			hud.showToast(GameConfig.HISTORICAL_QUOTES.CURFEW_WARNING, 3.4);
+		}
+
+		// TEMP 验证：首帧注入夜晚追猎局面，并每秒打印态势（验完删除）
+		if (!probeSeeded) {
+			probeSeeded = true;
+			gs.silver = 5000;
+			gs.food = 5000;
+			// 两名背着盐的灶户被丢在远滩涂，天色马上转黄皆
+			spawnVillager(4300, 'SALT_WORKER');
+			spawnVillager(4520, 'SALT_WORKER');
+			for (const v of villagers) {
+				if (v.role === 'SALT_WORKER') {
+					v.carrying = true;
+					v.refreshVisual();
+				}
+			}
+			spawnVillager(GameConfig.MAP_LANDMARKS.INNER_GATE.x, 'BUILDER');
+			gs.dayTimer = 8;
+		}
+		probeTimer -= clampedDt;
+		if (probeTimer <= 0) {
+			probeTimer = 1.0;
+			const sw = villagers
+				.filter((v) => v.role === 'SALT_WORKER')
+				.map((v) => `${Math.round(v.x)}${v.carrying ? 'c' : ''}`);
+			const bd = villagers.filter((v) => v.role === 'BUILDER').length;
+			print(
+				`PROBE d=${gs.day} ph=${gs.phase} t=${gs.dayTimer.toFixed(1)} pop=${gs.populationCount} sw=[${sw.join(
+					','
+				)}] builders=${bd} proj=${gs.projects.length} rec=${gs.recruits.length} straggle=${stragglers} enemy=${enemies.length} salv=${scavenges.length}`
+			);
+		}
+
 		const nightBoss = findBoss(enemies);
 		hud.update(
 			clampedDt,
@@ -882,7 +1217,16 @@ export function GameScene(): Node.Type {
 			enemies.length,
 			nightBoss !== undefined ? nightBoss.hp : 0,
 			nightBoss !== undefined ? nightBoss.maxHp : 0,
-			nightBoss !== undefined ? GameConfig.ENEMIES.BOSS.name : ''
+			nightBoss !== undefined ? GameConfig.ENEMIES.BOSS.name : '',
+			{
+				projects: gs.projects.map((p) => ({
+					label: p.label,
+					pct: 1 - p.remain / Math.max(0.001, p.total),
+					workers: p.workers,
+				})),
+				recruitRemain: gs.recruits.length > 0 ? gs.recruits[0].remain : 0,
+				stragglers,
+			}
 		);
 		return false;
 	});

@@ -15,6 +15,13 @@ export type EnemyType = 'SCOUT' | 'SAMURAI' | 'BOSS';
 
 export type TowerType = 'ARROW' | 'CANNON';
 
+/** 营建/升级工程类型（读秒施工，见 CONSTRUCTION_SECONDS） */
+export type ProjectKind =
+	| 'HALL_UPGRADE'
+	| 'EAST_GATE_UPGRADE'
+	| 'TOWER_UNLOCK'
+	| 'TOWER_UPGRADE';
+
 export type LandmarkId =
 	| 'DALUO_MOUNTAIN'
 	| 'ANCESTRAL_HALL'
@@ -95,14 +102,14 @@ export const GameConfig = {
 	// 视图与地图空间常量 (1D 逻辑，2D 卷轴)
 	SCREEN_WIDTH: 1280,
 	SCREEN_HEIGHT: 720,
-	MAP_WIDTH: 3600,
+	MAP_WIDTH: 5400,
 	GROUND_Y: 160,
 	CAMERA_MIN_X: 640,
-	CAMERA_MAX_X: 2960,
-	SAFE_LINE_X: 2400,
-	SPAWN_X: 3500,
+	CAMERA_MAX_X: 4760,
+	SAFE_LINE_X: 2460,
+	SPAWN_X: 5240,
 	OUTER_ZONE_MIN_X: 2800,
-	OUTER_ZONE_MAX_X: 3400,
+	OUTER_ZONE_MAX_X: 4900,
 
 	// 初始资源与建筑参数
 	INITIAL_SILVER: 260,
@@ -111,25 +118,104 @@ export const GameConfig = {
 	POPULATION_PER_HALL_LEVEL: 4,
 	RECRUIT_VILLAGER_COST: 80,
 
+	// ---- 民居（人口之源）----
+	// 人口上限 = min(住房容量, 粮食能养活的人数)；人慢慢从民居自然添丁，或花银子招募
+	HOUSE_SLOTS: [
+		{ x: 620, level: 1 },
+		{ x: 1040, level: 1 },
+		{ x: 1420, level: 1 },
+	],
+	HOUSE_MAX_LEVEL: 3,
+	// 每级民居可住的族丁数（lv1=2, lv2=4, lv3=6）
+	HOUSE_CAPACITY_PER_LEVEL: 2,
+	HOUSE_BASE_HP: 400,
+	// 民居升级：直接投银（一袋 40 两）
+	HOUSE_UPGRADE_COST_LV2: 160,
+	HOUSE_UPGRADE_COST_LV3: 360,
+	// 民居自然添丁：每间民居每过这么多秒添一名族丁（有空位且粮食够时）
+	HOUSE_SPAWN_SECONDS: 22,
+	// 每个族丁要占的口粮：粮食决定人口上限
+	FOOD_PER_PERSON: 25,
+
+	// ---- 投银（银两升级都要人跑过去扔到升级点）----
+	// 一袋银子的面额，所有工程/招募都按袋投入
+	SILVER_BAG: 40,
+	// 掷出银袋的抛物线飞行时间
+	THROW_SECONDS: 0.45,
+	THROW_RANGE: 150,
+
+	// ---- 撒银退敌：给倭寇钱，让他们放弃追击 ----
+	BRIBE_RANGE: 300,
+	BRIBE_COST: { SCOUT: 40, SAMURAI: 80, BOSS: 240 } as Record<string, number>,
+	// 收钱后退回海边的秒数（BOSS 只买“愕一下”的喘息时间）
+	BRIBE_RETREAT_SECONDS: 8,
+	BRIBE_BOSS_STUN_SECONDS: 3.5,
+
 	ANCESTRAL_HALL_BASE_HP: 1000,
 	ANCESTRAL_HALL_UPGRADE_BASE_COST: 180,
-	ANCESTRAL_HALL_MAX_LEVEL: 3,
+	ANCESTRAL_HALL_MAX_LEVEL: 5,
+	ANCESTRAL_HALL_HP_PER_LEVEL: 300,
 	SPRING_BLESSING_HEAL_RATIO: 0.2,
+	// 宗祠升级不再加人口，而是提士气：每级 +12% 攻击、+8% 气血上限
+	MORALE_ATTACK_PER_LEVEL: 0.12,
+	MORALE_HP_PER_LEVEL: 0.08,
+
+	// 夜袭猎杀：天黑后倭寇会主动追杀滞留在城外的族丁（此距离内）
+	// 范围要给得大：倭寇从海岸登岸，晚归的人正好在他们前方，能真被咬上
+	ENEMY_HUNT_RANGE: 900,
+	// 追杀时的血狂加速（否则肯定追不上负盐的灶户，威慎无从谈起）
+	ENEMY_HUNT_SPEED_SCALE: 1.9,
+
+	// 营建读秒：升级 / 建造不再瞬间完成，须等工期走完（有工匠在场会快很多）
+	CONSTRUCTION_SECONDS: {
+		HALL_UPGRADE: 16,
+		EAST_GATE_UPGRADE: 14,
+		INNER_GATE_REPAIR: 0,
+		TOWER_UNLOCK: 12,
+		TOWER_UPGRADE: 10,
+	} as Record<ProjectKind, number>,
+	// 工期推进速率：基础自动推进 + 每名在场工匠加成，上限
+	BUILD_RATE_IDLE: 0.3,
+	BUILD_RATE_PER_BUILDER: 0.7,
+	BUILD_RATE_MAX: 2.5,
+	BUILD_SITE_RADIUS: 70,
+
+	// 招募读秒：付款后过几秒族丁才到宗祠报到
+	RECRUIT_SECONDS: 3.0,
+	RECRUIT_MAX_PENDING: 3,
+
+	// ---- 灶户取盐：出城到盐田装盐，再背回盐课司入库（来回一趟约 30 余秒，黄昏前须赶回） ----
+	SALT_FETCH: {
+		gatherSeconds: 3.0,
+		// 负盐跑得慢（也很容易被倭寇追上），天黑狂奔时仍背负着担子
+		carrySpeedScale: 0.62,
+		panicSpeedScale: 1.35,
+		// 夜里近处出现倭寇（比这还近）时，灶户会弃担逃命（盐担失落城外，可捡回）
+		dropSaltThreatRange: 520,
+		yardOffsetMin: -260,
+		yardOffsetMax: 260,
+		tripSilver: 120,
+		dropSilverIfCaught: 60,
+	},
+	// 黄昏回城：白天剩余时间少于这个秒数时，城外族丁开始往城里跑
+	DUSK_RETURN_SECONDS: 12,
+	CURFEW_ALERT_SECONDS: 10,
 
 	INNER_GATE_BASE_HP: 600,
 	INNER_GATE_UPGRADE_COST: 140,
-	INNER_GATE_DEFENSE_X: 1550,
+	INNER_GATE_DEFENSE_X: 1610,
 
 	EAST_GATE_BASE_HP: 800,
 	EAST_GATE_UPGRADE_BASE_COST: 160,
 	EAST_GATE_MAX_LEVEL: 3,
-	EAST_GATE_DEFENSE_X: 2350,
+	EAST_GATE_DEFENSE_X: 2410,
 
 	// 敌台防御塔配置
 	TOWER_SLOTS: [
-		{ id: 'INNER_TOWER', x: 1640, defaultType: 'CANNON' as TowerType, unlocked: false, unlockCost: 150 },
-		{ id: 'WALL_TOWER', x: 2000, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
-		{ id: 'EAST_TOWER', x: 2360, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
+		{ id: 'INNER_TOWER', x: 1700, defaultType: 'CANNON' as TowerType, unlocked: false, unlockCost: 150 },
+		{ id: 'WALL_TOWER', x: 2060, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
+		{ id: 'EAST_TOWER', x: 2420, defaultType: 'ARROW' as TowerType, unlocked: true, unlockCost: 0 },
+		{ id: 'SALT_TOWER', x: 3300, defaultType: 'ARROW' as TowerType, unlocked: false, unlockCost: 220 },
 	],
 	TOWER_STATS: {
 		ARROW: {
@@ -201,18 +287,18 @@ export const GameConfig = {
 			id: 'ANCESTRAL_HALL',
 			name: '王氏宗祠',
 			subtitle: '江南故宫 · 核心',
-			x: 400,
+			x: 460,
 			width: 180,
 			height: 180,
 			color: 0xff9b2c2c,
 			description: '英桥王氏宗祠，基地核心。耐久归零则堡破人亡。',
-			interactHint: '[E] 招募闲置族丁 (80白银) / 升级宗祠提高人口上限',
+			interactHint: '[E] 投一袋银饷 (40两) 招募族丁；点「升级宗祠」投银升士气',
 		},
 		PADDY_FIELD: {
 			id: 'PADDY_FIELD',
 			name: '堡内水田',
 			subtitle: '军粮自给',
-			x: 800,
+			x: 860,
 			width: 220,
 			height: 44,
 			color: 0xff68a357,
@@ -223,29 +309,29 @@ export const GameConfig = {
 			id: 'SALT_OFFICE',
 			name: '永嘉场盐课司',
 			subtitle: '白银命脉',
-			x: 1200,
+			x: 1260,
 			width: 170,
 			height: 130,
 			color: 0xffd6b36a,
-			description: '迁入堡内之盐课司。灶户每5秒煎盐产出25白银。',
-			interactHint: '[E] 置办【盐铲】 (60白银) -> 闲置族丁拾取转为灶户',
+			description: '灶户须出城赴盐田装盐，再背回盐课司入库。一趟来回三十余秒，黄昏来不及回城的盐丁会被倭寇所杀。',
+			interactHint: '[E] 置办【盐铲】 (60白银) -> 闲置族丁转为灶户，出城取盐',
 		},
 		INNER_GATE: {
 			id: 'INNER_GATE',
 			name: '内城水门与作坊',
 			subtitle: '第二道防线',
-			x: 1600,
+			x: 1660,
 			width: 130,
 			height: 190,
 			color: 0xff5a6772,
-			description: '工匠作坊与水门铁闸。东门若失守，义师退守此第二道防线。',
-			interactHint: '[E] 置办【木锤】 (70白银) -> 筑城工匠 / 解锁内城炮台',
+			description: '工匠作坊与水门铁闸。所有营建与升级工程都在此调度，工匠越多工期越短。',
+			interactHint: '[E] 置办【木锤】 (70白银) -> 筑城工匠 / 修筑内城炮台',
 		},
 		MAIN_WALL: {
 			id: 'MAIN_WALL',
 			name: '主城墙 · 校场',
 			subtitle: '十八号包干分段',
-			x: 2000,
+			x: 2060,
 			width: 180,
 			height: 150,
 			color: 0xff718096,
@@ -256,30 +342,30 @@ export const GameConfig = {
 			id: 'EAST_GATE',
 			name: '环海楼与东门瓮城',
 			subtitle: '第一道核心防线',
-			x: 2400,
+			x: 2460,
 			width: 140,
 			height: 220,
 			color: 0xff4a5568,
 			description: '环海楼带瓮城，永昌堡东向第一道防线。入夜前务必关闭城门！',
-			interactHint: '[E] 开关东门 / 升级加固东门瓮城',
+			interactHint: '[E] 开关东门 / 加固东门瓮城（需工期）',
 		},
 		OUTER_SALT_FLAT: {
 			id: 'OUTER_SALT_FLAT',
 			name: '城外盐田与滩涂',
-			subtitle: '白天高危拓荒区',
-			x: 3100,
-			width: 560,
+			subtitle: '灶户取盐区 · 白天高危',
+			x: 3500,
+			width: 1500,
 			height: 28,
 			color: 0xffb79f78,
-			description: '城外散落无主盐包(+80银)与漂流木料(+50修复)，黄昏前须全员撤回城内。',
-			interactHint: '靠近散落物资自动拾取，按 [K] 鸣鼓召回城外族丁。',
+			description: '城外盐田，灶户在此装盐；散落无主盐包(+80银)与漂流木料(+50修复)。黄昏前须全员撤回城内，否则必遭倭寇屠戮。',
+			interactHint: '灶户自动来此装盐；可在盐田侧筑敌台护盐 (220银)。',
 		},
 		COAST_SPAWN: {
 			id: 'COAST_SPAWN',
 			name: '东海海岸',
 			subtitle: '倭寇登岸处',
-			x: 3500,
-			width: 140,
+			x: 5000,
+			width: 240,
 			height: 60,
 			color: 0xff1e4e79,
 			description: '倭寇船只夜袭登岸之所，黑夜降临时倭寇由此涌来。',
@@ -332,10 +418,10 @@ export const GameConfig = {
 			attackDamage: 6,
 			attackRange: 40,
 			attackInterval: 1.5,
-			produceInterval: 5,
-			produceAmount: 25,
+			produceInterval: 3.0, // 在盐田装满一擔盐所需秒数
+			produceAmount: 120, // 背回盐课司一趟入库白银
 			repairPerSec: 0,
-			description: '白昼于盐课司煎盐，每5秒产出25白银；入夜躲回宗祠。',
+			description: '白昼出城到城外盐田装盐，再背回盐课司入库(每趟120银)。负重跑得慢，黄昏前赶不回来就会死在城外。',
 		},
 		BUILDER: {
 			role: 'BUILDER',
@@ -351,7 +437,7 @@ export const GameConfig = {
 			produceInterval: 0,
 			produceAmount: 0,
 			repairPerSec: 15,
-			description: '全天候巡检受损城门与敌台，每秒修复15点耐久。',
+			description: '全天候巡检受损城门与敌台，每秒修复15点耐久；有在建工程时会先赶去工地，每名在场工匠使工期快 70%。',
 		},
 		MILITIA: {
 			role: 'MILITIA',
@@ -550,6 +636,10 @@ export const GameConfig = {
 	HISTORICAL_QUOTES: {
 		TITLE_SUBTITLE: '明嘉靖三十七年 · 温州龙湾永嘉场',
 		DUSK_WARNING: '黄昏钟响！天色将暗，请速按 [K] 召回城外族丁并关闭东门！',
+		CURFEW_WARNING: '日头将落，仍有族丁滞留城外！天黑前赶不回内城，必遭倭寇毒手——速按 [K] 鸣鼓召回！',
+		SALT_HAUL_LOST: '盐担失落城外……',
+		SALT_HAUL_ARRIVED: '盐担入库',
+		PROJECT_STARTED: '工程已开工，工匠会赶去施工（在工地左近可加快工期）。',
 		SPRING_BLESSING: '宗祠春祭祈福生效：全体义师恢复 20% 气血！',
 		LOW_FOOD_WARNING: '堡内粮草告罄！义师饥疲，攻击速度减半！',
 		VICTORY_EPILOGUE: '嘉靖三十七年始筑，十一个月功成；四门十二敌台，八挫倭锋，永昌之名震于浙东。',

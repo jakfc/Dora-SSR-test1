@@ -79,6 +79,13 @@ export interface HudCallbacks {
 	onVictoryModalConfirm: () => void;
 }
 
+/** 每帧交给 HUD 的额外态势（营建进度 / 招募读秒 / 城外未归人数） */
+export interface HudExtraInfo {
+	projects: { label: string; pct: number; workers: number }[];
+	recruitRemain: number;
+	stragglers: number;
+}
+
 const TOP_BAR_HEIGHT = 64;
 const BOTTOM_BAR_HEIGHT = 76;
 
@@ -124,6 +131,11 @@ export class HudLayer {
 	private readonly bossLabel: Label.Type;
 	private bossWidth = 600;
 
+	// 营建/招募读秒面板与黄昏未归警报
+	private readonly workLabel: Label.Type;
+	private readonly alertLabel: Label.Type;
+	private alertPulse = 0;
+
 	private toastTimer = 0;
 	private currentLandmark: LandmarkId | undefined = undefined;
 	private callbacks: HudCallbacks;
@@ -164,6 +176,20 @@ export class HudLayer {
 		this.silverLabel.anchor = Vec2(0, 0.5);
 		this.silverLabel.color = Color(0xfff6e05e);
 		this.node.addChild(this.silverLabel);
+
+		// 营建/招募读秒
+		this.workLabel = Label('sarasa-mono-sc-regular', 14) as Label.Type;
+		this.workLabel.anchor = Vec2(0, 0.5);
+		this.workLabel.color = Color(0xff9ae6b4);
+		this.workLabel.visible = false;
+		this.node.addChild(this.workLabel);
+
+		// 黄昏未归 / 城外遇袭警报
+		this.alertLabel = Label('sarasa-mono-sc-regular', 16) as Label.Type;
+		this.alertLabel.color = Color(0xfffc8181);
+		this.alertLabel.textWidth = Screen.width - 80;
+		this.alertLabel.visible = false;
+		this.node.addChild(this.alertLabel);
 
 		this.foodLabel = Label('sarasa-mono-sc-regular', 15) as Label.Type;
 		this.foodLabel.anchor = Vec2(0, 0.5);
@@ -355,6 +381,12 @@ export class HudLayer {
 		this.toastLabel.x = w / 2;
 		this.toastLabel.y = h - 102;
 
+		this.workLabel.x = 20;
+		this.workLabel.y = h - TOP_BAR_HEIGHT - 16;
+		this.alertLabel.x = w / 2;
+		this.alertLabel.y = h - 132;
+		this.alertLabel.textWidth = w - 80;
+
 		// 底部操作条
 		this.bottomBg.clear();
 		if (this.bottomBarArt === undefined) {
@@ -438,7 +470,8 @@ export class HudLayer {
 		enemyCount: number,
 		bossHp = 0,
 		bossMaxHp = 0,
-		bossName = ''
+		bossName = '',
+		info?: HudExtraInfo
 	): void {
 		if (this.toastTimer > 0) {
 			this.toastTimer = Math.max(0, this.toastTimer - dt);
@@ -471,6 +504,33 @@ export class HudLayer {
 			`农:${gs.getRoleCount('FARMER')} 灶:${gs.getRoleCount('SALT_WORKER')} 工:${gs.getRoleCount('BUILDER')} 兵:${gs.getRoleCount('MILITIA') + gs.getRoleCount('KUNG_FU')}`;
 
 		this.skipDayBtn.visible = gs.phase === 'DAY' && !this.victoryModal.visible;
+
+		// 营建 / 招募读秒
+		if (info !== undefined && (info.projects.length > 0 || info.recruitRemain > 0)) {
+			const parts: string[] = [];
+			for (const p of info.projects) {
+				const pct = Math.max(0, Math.min(100, Math.floor(p.pct * 100)));
+				parts.push(`施工 ${p.label} ${pct}%${p.workers > 0 ? ` (匠${p.workers})` : ' (无匠)'}`);
+			}
+			if (info.recruitRemain > 0) parts.push(`募丁中 ${info.recruitRemain.toFixed(1)}s`);
+			this.workLabel.text = parts.join('   ·   ');
+			this.workLabel.visible = true;
+		} else {
+			this.workLabel.visible = false;
+		}
+
+		// 黄昏未归 / 城外遇袭警报（闪烁）
+		this.alertPulse += dt * 5;
+		const dangerWindow = gs.phase === 'NIGHT' || gs.dayTimer <= GameConfig.DUSK_RETURN_SECONDS;
+		if (info !== undefined && info.stragglers > 0 && dangerWindow) {
+			this.alertLabel.visible = Math.sin(this.alertPulse) > -0.35;
+			this.alertLabel.text =
+				gs.phase === 'NIGHT'
+					? `⚔ 城外还有 ${info.stragglers} 名族人正遭倭寇追杀！`
+					: `⚠ 黄昏将至，城外还有 ${info.stragglers} 名族人未归（[K] 鸣鼓召回）`;
+		} else {
+			this.alertLabel.visible = false;
+		}
 
 		if (nearestLandmark !== this.currentLandmark) {
 			this.currentLandmark = nearestLandmark;

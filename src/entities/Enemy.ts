@@ -36,6 +36,11 @@ export class Enemy {
 	public hp: number;
 	public maxHp: number;
 	public dead = false;
+	/** 收了银子退兵（走到海边自行退场，不计击杀） */
+	public bribed = false;
+	/** 已退场（被撁退而不算阵亡） */
+	public escaped = false;
+	private bribeStunTimer = 0;
 	private attackTimer = 0;
 	private hitFlashTimer = 0;
 
@@ -90,10 +95,19 @@ export class Enemy {
 		}
 		// 血条（有底框素材时只画填充，底框由 e10 提供）
 		const pct = Math.max(0, this.hp / this.maxHp);
+		// 收银退兵的倭寇：名字变色，血条转成金色（不再流血）
+		const baseName = this.type === 'SCOUT' ? '倭探' : cfg.name;
+		if (this.bribed) {
+			this.nameLabel.text = `${baseName}·收银退兵`;
+			this.nameLabel.color = Color(0xfff6e05e);
+		} else {
+			this.nameLabel.text = baseName;
+			this.nameLabel.color = Color(this.type === 'BOSS' ? 0xfffeb2b2 : 0xffe2e8f0);
+		}
 		if (this.barBgArt === undefined) {
 			drawRect(this.bodyDraw, -hw - 4, cfg.height + 5, cfg.width + 8, 5, 0xff2d3748);
 		}
-		drawRect(this.bodyDraw, -hw - 4, cfg.height + 5, (cfg.width + 8) * pct, 5, 0xffe53e3e);
+		drawRect(this.bodyDraw, -hw - 4, cfg.height + 5, (cfg.width + 8) * pct, 5, this.bribed ? 0xfff6e05e : 0xffe53e3e);
 	}
 
 	public takeDamage(amount: number, knockbackX = 0): void {
@@ -116,8 +130,39 @@ export class Enemy {
 		this.refreshVisual();
 	}
 
+	/** 撁银买命：倭寇收钱掉头，头目收钱也只能被撁住一阵 */
+	public bribe(): void {
+		if (this.dead || this.bribed) return;
+		this.bribed = true;
+		if (this.type === 'BOSS') {
+			this.bribeStunTimer = GameConfig.BRIBE_BOSS_STUN_SECONDS;
+		} else {
+			this.bribeStunTimer = 0;
+		}
+		this.refreshVisual();
+	}
+
 	public update(dt: number, villagers: Villager[]): void {
-		if (this.dead) return;
+		if (this.dead || this.escaped) return;
+
+		// 0. 收了银子就跑：头目只被撁住一阵，小兵直接掉头滚回海边
+		if (this.bribed) {
+			const cfg0 = GameConfig.ENEMIES[this.type];
+			if (this.type === 'BOSS') {
+				this.bribeStunTimer = Math.max(0, this.bribeStunTimer - dt);
+				if (this.bribeStunTimer > 0) return;
+				this.bribed = false;
+				this.refreshVisual();
+			} else {
+				this.x += cfg0.moveSpeed * 1.3 * dt;
+				this.node.x = this.x;
+				if (this.x >= GameConfig.MAP_WIDTH - 130) {
+					this.escaped = true;
+					this.node.removeFromParent();
+				}
+				return;
+			}
+		}
 
 		if (this.attackTimer > 0) this.attackTimer = Math.max(0, this.attackTimer - dt);
 		if (this.hitFlashTimer > 0) {
@@ -146,6 +191,34 @@ export class Enemy {
 				targetVillager.takeDamage(cfg.attackDamage);
 			}
 			return;
+		}
+
+		// 1.5 夜袭猎杀：天黑后主动追杀滞留在城外的族丁（玩家可用 [K] 鸣鼓召回或派兵救援）
+		if (gs.phase === 'NIGHT') {
+			const wallX = GameConfig.MAP_LANDMARKS.EAST_GATE.x;
+			let straggler: Villager | undefined = undefined;
+			let huntDist = GameConfig.ENEMY_HUNT_RANGE;
+			for (const v of villagers) {
+				if (v.dead || v.x <= wallX) continue;
+				const d = Math.abs(v.x - this.x);
+				if (d <= huntDist) {
+					huntDist = d;
+					straggler = v;
+				}
+			}
+			if (straggler !== undefined) {
+				if (huntDist <= cfg.attackRange) {
+					if (this.attackTimer <= 0) {
+						this.attackTimer = cfg.attackInterval;
+						straggler.takeDamage(cfg.attackDamage);
+					}
+				} else {
+					const dir = straggler.x > this.x ? 1 : -1;
+					this.x += dir * cfg.moveSpeed * GameConfig.ENEMY_HUNT_SPEED_SCALE * dt;
+					this.node.x = this.x;
+				}
+				return;
+			}
 		}
 
 		// 2. 检查是否被东门阻挡（关闭且有耐久）
