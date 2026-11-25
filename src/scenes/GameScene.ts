@@ -209,36 +209,22 @@ export function GameScene(): Node.Type {
 		return v - Math.floor(v);
 	};
 	if (artReady('ground_beach')) {
-		const variantOf = (base: string, list: string[], seed: number): string => {
-			const pick = list[Math.floor(groundRand(seed) * list.length)];
-			return pick !== undefined && artReady(pick) ? pick : base;
-		};
 		let tileIndex = 0;
-		const layRow = (from: number, to: number, base: string, variants: string[]) => {
-			for (let x = from; x < to; x += GROUND_TILE) {
-				const id = variantOf(base, variants, tileIndex * 3.7);
-				// 微抖只往上抖（ay=0 贴底：y 为负会在贴图下沿露出空隙），同时错开接缝
-				// 贴图底边压到地平线以下：下面那一截由水面盖掉
-				const node = artAt(
-					groundArtNode,
-					id,
-					x,
-					// 贴图顶边贴地平线，下面一大截由前景水面盖掉。
-					// 不要加 y 抖动：一晃就会在相邻两块的接缝上露出底色，看着像个“白洞”。
-					GameConfig.GROUND_Y - GROUND_TILE_ART_H
-				);
-				// 镜像要连带把 x 挪回一格：这类贴图 ax=0（贴左），翻转后内容会跑到左边去
-				if (node !== undefined && groundRand(tileIndex * 5.3) < 0.5) {
-					node.scaleX = -1;
-					node.x = x + GROUND_TILE;
-				}
-				tileIndex++;
-			}
-		};
-		layRow(westSeaEnd, cityMinX, 'ground_beach', ['ground_beach_b', 'ground_beach_c']);
-		layRow(cityMaxX, GameConfig.MAP_WIDTH, 'ground_beach', ['ground_beach_b', 'ground_beach_c']);
-		if (artAt(groundArtNode, 'ground_city', cityMinX, 0) !== undefined) {
-			layRow(cityMinX, cityMaxX, 'ground_city', ['ground_city_b']);
+		// 一整条从头铺到尾，按「块中心」落在哪个区选滩涂/堡内石板。
+		// 之前分三段各铺一次，段尾总会多出半块压到下一段上，接缝处就是一道垂直断层。
+		for (let x = 0; x < GameConfig.MAP_WIDTH; x += GROUND_TILE) {
+			const mid = x + GROUND_TILE / 2;
+			const inCity = mid >= cityMinX && mid <= cityMaxX;
+			const want = inCity ? 'ground_city' : 'ground_beach';
+			const variants = inCity ? ['ground_city_b'] : ['ground_beach_b', 'ground_beach_c'];
+			const pick = variants[Math.floor(groundRand(tileIndex * 3.7) * variants.length)];
+			const id =
+				pick !== undefined && artReady(pick) ? pick : artReady(want) ? want : 'ground_beach';
+			// 一块正好占满 [x, x+640]：不加 y 抖动、也不做镜像翻转。
+			// 镜像那套（scaleX=-1 再把 x 挪一格）在左下角锚点下会把图案甩到隔壁格，
+			// 结果就是「原格空成白洞 + 隔壁双叠两张」。重复感交给变体图和碎屑层。
+			artAt(groundArtNode, id, x, GameConfig.GROUND_Y - GROUND_TILE_ART_H);
+			tileIndex++;
 		}
 		groundDraw.clear();
 		// 两头海面重新盖回（铺贴图时不能让滩涂越界到海里）
