@@ -1,4 +1,4 @@
-import { Node, Rect, Size, Sprite, Texture2D, Vec2 } from 'Dora';
+import { Content, Node, Rect, Size, Sprite, Texture2D, Vec2 } from 'Dora';
 
 /**
  * ============================================================
@@ -179,8 +179,8 @@ function hiPathOf(path: string): string | undefined {
 	const cached = hiPathCache[path];
 	if (cached !== undefined) return cached.length > 0 ? cached : undefined;
 	const hi = path.substring(0, path.length - 4) + '@2x.png';
-	const dim = Texture2D(hi);
-	const ok = dim !== undefined && dim.width > 0 && dim.height > 0;
+	// 用 Content.exist 探测而不是 Texture2D()：后者失败会在引擎日志里刷 failed to load texture
+	const ok = Content.exist(hi);
 	hiPathCache[path] = ok ? hi : '';
 	return ok ? hi : undefined;
 }
@@ -191,6 +191,10 @@ function texOf(path: string): Texture2D.Type | undefined {
 	if (hi !== undefined) {
 		const high = Texture2D(hi);
 		if (high !== undefined && high.width > 0 && high.height > 0) return high;
+	}
+	if (!Content.exist(path)) {
+		missingPaths[path] = true;
+		return undefined;
 	}
 	const dim = Texture2D(path);
 	if (dim === undefined || dim.width <= 0 || dim.height <= 0) {
@@ -406,7 +410,9 @@ export function artAnimFrames(styleId: string, prefix: string): string[] {
 		const dir = dirOfSpec(spec);
 		for (let i = 1; i <= ANIM_MAX_FRAMES; i++) {
 			const path = `${dir}${prefix}_${i < 10 ? '0' : ''}${i}.png`;
-			if (missingPaths[path] === true || texOf(path) === undefined) {
+			// 先用 Content.exist 探路（不加载纹理）：否则「多探一帧」会在引擎日志里刷一堆
+			// failed to load texture，既吵又白费一次磁盘/解码开销
+			if (missingPaths[path] === true || !Content.exist(path)) {
 				missingPaths[path] = true;
 				break;
 			}

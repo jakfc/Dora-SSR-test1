@@ -3,6 +3,7 @@ import { EnemyType, GameConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Villager } from 'src/entities/Villager';
 import { ANIM_FPS, artAnimCount, artAnimInto, artHide, artReady, artStretch } from 'src/config/Assets';
+import { soundSfx } from 'src/audio/Sound';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -120,6 +121,7 @@ export class Enemy {
 		if (this.dead) return;
 		this.hp -= amount;
 		this.hitFlashTimer = 0.1;
+		soundSfx('hurt');
 		if (knockbackX !== 0) {
 			this.x = Math.min(GameConfig.MAP_WIDTH - 40, this.x + knockbackX);
 			this.node.x = this.x;
@@ -131,6 +133,7 @@ export class Enemy {
 			GameState.instance.addSilver(cfg.rewardSilver);
 			GameState.instance.totalKills++;
 			this.dying = 0.7;
+			soundSfx('enemy_die');
 			this.tickAnim(0);
 			return;
 		}
@@ -163,7 +166,8 @@ export class Enemy {
 		}
 		this.animPrevX = this.x;
 
-		let prefix = `${base}_${name}`;
+		// 站立帧的命名是 `enemy_<type>_NN.png`（不带动作词），移动/出手/倒地才是 `_walk` / `_attack` / `_fall`
+		let prefix = name === 'idle' ? base : `${base}_${name}`;
 		let frames = artAnimCount(styleId, prefix);
 		if (frames === 0 && name !== 'walk') {
 			prefix = `${base}_walk`;

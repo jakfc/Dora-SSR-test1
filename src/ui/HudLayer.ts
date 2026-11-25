@@ -3,6 +3,7 @@ import { GameConfig, LandmarkId, NightWaveConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Screen } from 'src/config/Screen';
 import { artAt, artHide, artInto, artSprite, artStretch } from 'src/config/Assets';
+import { soundIsMuted, soundSfx, soundToggleMuted } from 'src/audio/Sound';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -66,6 +67,7 @@ export function createButton(
 	}
 
 	btn.onTapEnded(() => {
+		soundSfx('ui_click');
 		onClick();
 	});
 	return btn;
@@ -287,8 +289,35 @@ export class HudLayer {
 		// [F] 撒银退敌：开一袋银子买命，让倭寇掉头
 		const btnF = createButton('[F] 撒银', 92, 38, 0xffb7791f, () => this.callbacks.onBribe(), 14);
 		this.node.addChild(btnF);
-		// 布局时再定位，这里先记录引用
-		this.skillButtons = [btnE, btnJ, btnK, btnF];
+
+		// 静音开关：一把拧总音量，标签随状态翻转（点它切换）
+		const muteLabel = Label('sarasa-mono-sc-regular', 15) as Label.Type;
+		muteLabel.color = Color(0xfffefcbf);
+		muteLabel.x = 22;
+		muteLabel.y = 19;
+		muteLabel.text = soundIsMuted() ? '音×' : '音♪';
+		const btnM = Node();
+		btnM.size = Size(44, 38);
+		btnM.touchEnabled = true;
+		const muteBg = artStretch('ui_btn_normal', 44, 38);
+		if (muteBg !== undefined) {
+			muteBg.anchor = Vec2(0, 0);
+			muteBg.size = Size(44, 38);
+			btnM.addChild(muteBg);
+		} else {
+			const bg = DrawNode();
+			drawRect(bg, 0, 0, 44, 38, 0xff4a5568, 0xffe2e8f0);
+			btnM.addChild(bg);
+		}
+		btnM.addChild(muteLabel);
+		btnM.onTapEnded(() => {
+			const muted = soundToggleMuted();
+			muteLabel.text = muted ? '音×' : '音♪';
+		});
+		this.node.addChild(btnM);
+
+		// 布局时再定位，这里先记录引用（静音键排在最左）
+		this.skillButtons = [btnM, btnE, btnJ, btnK, btnF];
 
 		// 地标多选项浮动按钮容器
 		this.extraActionNode = Node();

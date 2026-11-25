@@ -10,6 +10,7 @@ import { Player } from 'src/entities/Player';
 import { ToolDrop, Villager } from 'src/entities/Villager';
 import { HudLayer } from 'src/ui/HudLayer';
 import { playFx, tickFx } from 'src/ui/Fx';
+import { soundBgm, soundSfx } from 'src/audio/Sound';
 
 interface ScavengeDrop {
 	x: number;
@@ -620,12 +621,14 @@ export function GameScene(): Node.Type {
 			}
 			if (p.workers > 0 && Math.random() < dt * 3) {
 				playFx(worldLayer, 'fx_arrow_hit', p.x + 30, GameConfig.GROUND_Y + 22, 0.26, 0.35, 8);
+				soundSfx('build_hammer');
 			}
 		}
 	};
 
 	/** 工程竣工结算（等级 / 耐久 / 贴图 / 特效） */
 	const completeProject = (p: BuildProject) => {
+		soundSfx('upgrade');
 		if (p.kind === 'HALL_UPGRADE') {
 			const oldHpBonus = gs.moraleHpBonus;
 			gs.ancestralHallLevel++;
@@ -752,6 +755,10 @@ export function GameScene(): Node.Type {
 		if (gs.phase === 'NIGHT') return;
 		gs.phase = 'NIGHT';
 		gs.duskWarned = false;
+		// 入夜：号角 + 城门落锁，BGM 切夜间曲
+		soundBgm('night');
+		soundSfx('wave_horn');
+		soundSfx('gate_open');
 		nightElapsed = 0;
 		foodConsumeTimer = 0;
 
@@ -785,6 +792,7 @@ export function GameScene(): Node.Type {
 		y1: number;
 	}[] = [];
 	const spawnSilverThrow = (x0: number, x1: number) => {
+		soundSfx('coin_silver');
 		const n = Node();
 		const d = DrawNode();
 		drawRect(d, -8, -8, 16, 16, 0xfff6e05e, 0xff744210);
@@ -1157,10 +1165,12 @@ export function GameScene(): Node.Type {
 			gs.duskWarned = false;
 			spawnDailyScavenges();
 			refreshEnvironmentVisuals();
+			soundBgm('day');
 		},
 	});
 	scene.addChild(hud.node);
 	refreshEnvironmentVisuals();
+	soundBgm('day');
 
 	// 窗口尺寸变化时重排 HUD 与背景（不重建场景，避免丢失游戏进度）
 	SceneManager.setRelayout(() => {
@@ -1357,6 +1367,7 @@ export function GameScene(): Node.Type {
 		// 5.2 招募读秒：到岗即生成族丁
 		const arrivedRecruits = gs.tickRecruits(clampedDt);
 		for (let i = 0; i < arrivedRecruits; i++) {
+			soundSfx('recruit');
 			spawnVillager(GameConfig.MAP_LANDMARKS.ANCESTRAL_HALL.x + 30, 'IDLE');
 			addFloatingText(
 				'+1 族丁',
@@ -1369,6 +1380,7 @@ export function GameScene(): Node.Type {
 		// 5.3 民居添丁：住房与粮食都有余裕时，民居自己慢慢走出人来（比交银招募慢得多）
 		const bornFromHouses = gs.tickHouses(clampedDt);
 		for (const born of bornFromHouses) {
+			soundSfx('recruit');
 			spawnVillager(born.x, 'IDLE');
 			addFloatingText('+1 族丁', born.x, GameConfig.GROUND_Y + 110, 0xff9ae6b4);
 		}
@@ -1443,6 +1455,7 @@ export function GameScene(): Node.Type {
 		if (gs.phase === 'NIGHT' && spawnQueue.length === 0 && enemies.length === 0) {
 			const wave = GameConfig.NIGHT_WAVES[gs.day - 1];
 			gs.wavesCleared++;
+			soundSfx('drum_rally');
 			gs.addSilver(wave.rewardSilver);
 
 			if (gs.day >= GameConfig.TOTAL_NIGHTS) {

@@ -4,6 +4,7 @@ import { Enemy } from 'src/entities/Enemy';
 import { Villager } from 'src/entities/Villager';
 import { ANIM_FPS, artAnimCount, artAnimFace, artAnimInto, artHide, artReady } from 'src/config/Assets';
 import { playFx } from 'src/ui/Fx';
+import { soundSfx } from 'src/audio/Sound';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -212,6 +213,8 @@ export class Player {
 		}
 
 		this.attackCooldownTimer = GameConfig.PLAYER.attackCooldown;
+		soundSfx('qilin_punch');
+		soundSfx('shockwave');
 		this.auraTimer = GameConfig.PLAYER.auraDuration;
 		this.slashFxTimer = 0.22;
 		this.moveTargetX = undefined;
@@ -261,6 +264,7 @@ export class Player {
 			return { triggered: false, recalledCount: 0 };
 		}
 		this.rallyCooldownTimer = GameConfig.PLAYER.rallyCooldown;
+		soundSfx('drum_rally');
 		let recalledCount = 0;
 
 		for (const v of villagers) {

@@ -5,6 +5,7 @@ import { GameState } from 'src/config/GameState';
 import { Screen } from 'src/config/Screen';
 import { artStretch } from 'src/config/Assets';
 import { createButton } from 'src/ui/HudLayer';
+import { soundBgm } from 'src/audio/Sound';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -29,6 +30,7 @@ function drawRect(
 export function GameOverScene(isVictory: boolean): Node.Type {
 	const scene = Node();
 	const gs = GameState.instance;
+	soundBgm(isVictory ? 'victory' : 'defeat');
 	// 结算界面属于 UI 空间：单位与设计分辨率一致，镜头拉近时不会被一起放大
 	Screen.attachUi(scene);
 	// 可视区域尺寸与设计框偏移

@@ -17,7 +17,10 @@
 | `generate_missing_abc.py`、`redraw_yongchang_assets.py` | 生成 / 重画 A/B/C 组素材的脚本（保存 prompt 与参数） | 想重跑生成时 |
 | `process_gemini_sprites.py`、`process_flow_batch.py` | 把外部生成的大图切帧、去背、缩放成项目要的尺寸 | 拿到 AI 生成的新图之后 |
 | `regen_bg_ai.py` | 重出背景层（天空 / 地面 / 远景）：白底抠图 → 去白边 → 边缘补色 → 1x + `@2x`。已有原图时加 `--post` 可以**只重跑后处理、不重新调 AI**（改抠图/裁切参数后常用） | 想重画背景、或重新处理手头的背景原图时 |
+| `upgrade_bg_pro.py` | 背景层的 AI 生成脚本（保存着每张背景的提示词与参数，比 `regen_bg_ai.py` 更激进的一套重出流程） | 想按提示词重出背景时 |
 | `redo_all_walks_from_video.py` | 从参考视频逐帧抽出行走动作，对齐底座后写成 6 帧 `*_walk_01..06.png`（1x + @2x） | 想重做/加帧行走动画时 |
+| `generate_audio_assets.py` | 合成全部 BGM / 音效（`.wav`，写到 `assets/audio/`），参数与清单都在脚本里 | 想重出/改音频时 |
+| `_probe_audio.py` | 音频运行时自检：逐个 `Content.exist` + 真的开播，报告缺失/播不出的文件 | 换音频之后 |
 
 ## 常用自检流程（换素材之后）
 
@@ -27,6 +30,7 @@ python tools/audit_padding.py      # 2. 留白是否需要重新校准
 python tools/audit_scale.py        # 3. 显示比例（px/unit）是否统一
 python tools/audit_2x.py           # 4. 还缺哪些 @2x 主稿
 python tools/inspect_scene.py      # 5. 跑起来，倒出场景树核对
+python tools/_probe_audio.py       # 6. 音频自检：文件在不在、能不能开播
 ```
 
 `inspect_scene.py` 需要引擎可执行文件路径，默认用安装版

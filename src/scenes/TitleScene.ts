@@ -5,6 +5,7 @@ import { GameState } from 'src/config/GameState';
 import { Screen } from 'src/config/Screen';
 import { artAt, artStretch } from 'src/config/Assets';
 import { createButton } from 'src/ui/HudLayer';
+import { soundBgm } from 'src/audio/Sound';
 
 function drawRect(
 	draw: DrawNode.Type,
@@ -28,6 +29,8 @@ function drawRect(
  */
 export function TitleScene(): Node.Type {
 	const scene = Node();
+	// 主题曲：只在标题场景响（切场景时声音模块会换曲）
+	soundBgm('title');
 	// 标题属于 UI 空间：单位与设计分辨率一致，镜头拉近时不会被一起放大
 	Screen.attachUi(scene);
 	// 可视区域尺寸与设计框偏移（窗口尺寸变化时本场景会被 SceneManager 重建）

@@ -3,6 +3,7 @@ import { GameConfig, VillagerRole } from 'src/config/GameConfig';
 import { GameState, BuildProject } from 'src/config/GameState';
 import { Enemy } from 'src/entities/Enemy';
 import { ANIM_FPS, artAnimCount, artAnimInto, artHide, artReady } from 'src/config/Assets';
+import { soundSfx } from 'src/audio/Sound';
 
 export interface ToolDrop {
 	id: number;
@@ -138,9 +139,11 @@ export class Villager {
 		if (this.hp <= 0) {
 			this.hp = 0;
 			this.dead = true;
+			soundSfx('enemy_die');
 			this.node.removeFromParent();
 			return;
 		}
+		soundSfx('hurt');
 		this.refreshVisual();
 	}
 
@@ -195,7 +198,8 @@ export class Villager {
 
 		const styleId = `villager_${this.role}`;
 		const base = `villager_${this.role.toLowerCase()}`;
-		let prefix = `${base}_${name}`;
+		// 站立帧的命名是 `villager_<role>_NN.png`（不带动作词），移动/劳作才是 `_walk` / `_work`
+		let prefix = name === 'idle' ? base : `${base}_${name}`;
 		let frames = artAnimCount(styleId, prefix);
 		if (frames === 0 && name !== 'walk') {
 			// 该动作没有专属帧：退到走路帧，好歹还在动
@@ -317,6 +321,7 @@ export class Villager {
 			if (this.produceTimer >= cfg.produceInterval) {
 				this.produceTimer -= cfg.produceInterval;
 				GameState.instance.addFood(cfg.produceAmount);
+				soundSfx('farm_hoe');
 				ctx.onProduceResource('FOOD', cfg.produceAmount, this.x);
 			}
 		}
@@ -503,6 +508,7 @@ export class Villager {
 
 				this.attackTimer = cfg.attackInterval / speedMult;
 				this.attackCount++;
+				soundSfx('sword_slash');
 
 				const dir = nearestEnemy.x >= this.x ? 1 : -1;
 				const moraleDmg = 1 + gs.moraleBonus;

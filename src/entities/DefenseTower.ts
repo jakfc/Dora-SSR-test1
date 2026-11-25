@@ -4,6 +4,7 @@ import { GameState, TowerState } from 'src/config/GameState';
 import { Enemy } from 'src/entities/Enemy';
 import { artHide, artInto, artSprite } from 'src/config/Assets';
 import { playFx } from 'src/ui/Fx';
+import { soundSfx } from 'src/audio/Sound';
 
 interface Projectile {
 	x: number;
@@ -171,6 +172,7 @@ export class DefenseTower {
 		if (!target) return;
 
 		this.cooldownTimer = stats.cooldown;
+		soundSfx(this.state.type === 'CANNON' ? 'cannon_fire' : 'arrow_shoot');
 		// 宗祠士气亦鼓舞炮手：每级 +12% 威力
 		const dmg = Math.round(
 			stats.damage * (1 + 0.25 * (this.state.level - 1)) * (1 + GameState.instance.moraleBonus)
@@ -201,6 +203,7 @@ export class DefenseTower {
 
 	private applyImpact(p: Projectile, enemies: Enemy[]): void {
 		// 箭矢 / 炮弹落点炸开一下（素材缺失则什么都不画）
+		soundSfx(p.isCannon ? 'cannon_hit' : 'arrow_hit');
 		playFx(
 			this.node.parent,
 			p.isCannon ? 'fx_cannon_hit' : 'fx_arrow_hit',
