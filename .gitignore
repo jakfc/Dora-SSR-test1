@@ -45,3 +45,8 @@ tools/__pycache__/
 !tools/_probe_*.py
 !tools/dump_scene.lua
 !tools/probe_keys.lua
+
+# 临时草稿目录（像素特效试验、生成中间产物）
+tmp/
+# 2.5D 备选素材（待定，暂不入库）
+assets_25d/

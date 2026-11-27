@@ -1,5 +1,8 @@
 import { Node, Sprite } from 'Dora';
 import { artFace, artInto } from 'src/config/Assets';
+import { clearPixelFx, tickPixelFx } from 'src/ui/PixelFx';
+export { playPixelFx } from 'src/ui/PixelFx';
+export type { PixelFxHandle, PixelFxOptions, PixelFxSpec } from 'src/ui/PixelFx';
 
 interface FxItem {
 	holder: Node.Type;
@@ -143,6 +146,8 @@ export function tickFx(dt: number): void {
 		const ease = 1 - (1 - u) * (1 - u) * (1 - u);
 		m.node.y = m.fromY + (m.toY - m.fromY) * ease;
 	}
+
+	tickPixelFx(dt);
 }
 
 /** 清场（切换场景时调用，避免残留节点）。 */
@@ -157,4 +162,5 @@ export function clearFx(): void {
 	}
 	pulses.splice(0, pulses.length);
 	moveYs.splice(0, moveYs.length);
+	clearPixelFx();
 }

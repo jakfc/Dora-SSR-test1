@@ -1,4 +1,5 @@
 import { Content, Node, Rect, Size, Sprite, Texture2D, Vec2 } from 'Dora';
+import { frameScaleOf } from 'src/config/FrameScale';
 
 /**
  * ============================================================
@@ -390,6 +391,14 @@ function artSpriteFromPath(path: string, spec: ArtSpec, applySize = true): Sprit
 		return undefined;
 	}
 	const fit = fitOf(spec, dim.width, dim.height);
+	// 逐帧显示倍率：AI 出的动作帧常常只有站姿的 6~7 成高，
+	// 同一族里就会看到「攻击变小 / 走路一高一低」。按该帧内容高与
+	// 人高基准的比值放大；锚点不动，所以脚底依然钉在地上。
+	const frameK = frameScaleOf(path);
+	if (frameK !== 1) {
+		fit.w *= frameK;
+		fit.h *= frameK;
+	}
 	if (fit.crop !== undefined) sprite.textureRect = fit.crop;
 	sprite.anchor = Vec2(spec.ax !== undefined ? spec.ax : 0.5, fit.anchorY);
 	if (applySize) sprite.size = Size(fit.w, fit.h);
