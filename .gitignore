@@ -50,3 +50,9 @@ tools/__pycache__/
 tmp/
 # 2.5D 备选素材（待定，暂不入库）
 assets_25d/
+
+# Aseprite 工程目录（从 assets/sprites 生成，改完用 tools/aseprite_export.py 写回）
+art_src/
+
+# Aseprite 便捷入口（与 tools/aseprite 下同一份）
+!art_src/*.bat
