@@ -26,7 +26,7 @@ import os
 import re
 import sys
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPRITES = os.path.join(ROOT, 'assets', 'sprites')
@@ -176,7 +176,13 @@ def save_2x(im, one_x_path):
 
 
 def fix_2x(lines, apply_it):
-    """@2x 必须是严格 2 倍画布 + 2 倍内容；否则用 1x 重做。"""
+    """@2x 必须是**严格 2 倍画布 + 逐像素等于 1x 的 2 倍最近邻放大**，否则用 1x 重做。
+
+    为什么不只比画布和内容框：引擎优先用 @2x 渲染，1x 只当上下文。
+    只挪动帧内元素（头/手微调）时，整体内容框不变，
+    但像素已经变了——旧版用「内容框偏移 > 24px」当判据会漏掉这类，
+    结果就是「1x 改了、游戏里看不见」。所以改成逐像素对比。
+    """
     bad = 0
     total = 0
     for d, _, files in os.walk(SPRITES):
@@ -204,6 +210,11 @@ def fix_2x(lines, apply_it):
                         reason = '内容偏移 %d px（1x 内容 %dx%d，@2x 内容 %dx%d）' % (
                             off, box[1] - box[0] + 1, box[3] - box[2] + 1,
                             hbox[1] - hbox[0] + 1, hbox[3] - hbox[2] + 1)
+                    elif ImageChops.difference(
+                            him.convert('RGBA'),
+                            im.convert('RGBA').resize((W * 2, H * 2),
+                                                      Image.Resampling.NEAREST)).getbbox() is not None:
+                        reason = '像素与 1x 不一致（1x 改过，@2x 没跟上）'
             if reason == '':
                 continue
             bad += 1

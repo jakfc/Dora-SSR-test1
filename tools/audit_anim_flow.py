@@ -146,10 +146,12 @@ def main():
             flags = []
             if spread(feet) > 1:
                 flags.append('脚底散 %d' % spread(feet))
-            if spread(torsos) > 2.5:
+            if spread(torsos) > 3.0:
+                # 阈值 3px：人物在这个项目里高 180px，3px = 1.7% 身高，是肉眼看不出的量；
+                # 再往下调会把「本来就没问题」的族也报出来。
                 flags.append('躯干晃 %.1f' % spread(torsos))
-            if spread(heads) > 6:
-                flags.append('头/手晃 %.1f' % spread(heads))
+            # 头/手晃**不作为不合格判据**（见文件头）：走路抬臂时「上方 25% 行」会
+            # 把手臂一起算进去，数值大不代表飘。数据仍然打印，供人工看。
             if spread(hs) > 0.22 * max(hs):
                 flags.append('高矮 %.0f%%' % (100 * spread(hs) / max(hs)))
             if sats:
