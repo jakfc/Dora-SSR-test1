@@ -102,18 +102,9 @@ export class Player {
 				);
 			}
 		}
-		if (this.slashFxTimer > 0) {
-			const sx = this.facing > 0 ? 10 : -GameConfig.PLAYER.attackRange;
-			drawRect(
-				this.fxDraw,
-				sx,
-				12,
-				GameConfig.PLAYER.attackRange - 10,
-				40,
-				0x88fefcbf,
-				0xfff6e05e
-			);
-		}
+		// 【已删】出拳时身前那个黄框：它是美术没到位时的「攻击范围占位框」
+		// （fill 0x88fefcbf / 描边 0xfff6e05e，110x40）。现在拳头有刀光特效，
+		// 再挂个黄框就成了「人物身前有个黄框框」，整块去掉。
 	}
 
 	/** 每帧推进主角动画：预步 / 普通攻击 / 行走 / 站立，缺帧逐级回退。 */
