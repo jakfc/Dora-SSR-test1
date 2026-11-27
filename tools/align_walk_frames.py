@@ -10,8 +10,10 @@
    偏移量定为 0，所有帧都对齐到它，所以**跑第二遍就是 0 改动**（幂等）。
 2. **不绕回**：平移用切片搬，会掉出画布的像素先检查是不是透明；只要会丢内容
    就把这次平移量收小，收不动就跳过这一帧并报告。
-3. **有收益才动**：只有当平移能让该帧与基准帧的重合度（IoU）真的提高
-   ≥0.02、且位移 ≥2px 时才写回。
+3. **有收益才动**：位移 ≥2px 才写回。
+4. **锚点是「躯干重心」，不是整体轮廓**：出拳、抬臂、抬腿会让整帧轮廓两边伸出去，
+   用轮廓重合度（IoU）对齐会把身体推歪；所以改成对齐**躯干中段（30%~70% 高）的
+   水平重心**——这才是眼睛认的「人有没有左右抖」。
 
 用法：
     python tools/align_walk_frames.py            # 只报告
@@ -69,6 +71,18 @@ def iou(a, b):
     return (int((ma & mb).sum()) / u) if u else 1.0
 
 
+def torso_axis(a):
+    """躯干水平重心：取中段（30%~70% 高）不透明像素的列平均。"""
+    ys = np.nonzero((a > ALPHA_MIN).any(axis=1))[0]
+    if not ys.size:
+        return None
+    y0, y1 = int(ys.min()), int(ys.max())
+    h = y1 - y0 + 1
+    mid = a[y0 + int(h * 0.30): max(y0 + int(h * 0.30) + 1, y0 + int(h * 0.70)), :]
+    cols = np.nonzero(mid > ALPHA_MIN)[1]
+    return float(cols.mean()) if cols.size else None
+
+
 def best_dx(src, ref):
     """找让 src 与 ref 重合度最高的水平位移。"""
     best, best_v = 0, iou(src, ref)
@@ -117,10 +131,16 @@ def main():
             if i == 0:
                 row.append('  0')
                 continue
-            dx, v0 = best_dx(a, ref)
-            if abs(dx) < MIN_SHIFT or v0 - iou(a, ref) < GAIN_MIN:
+            tref = torso_axis(ref)
+            ti = torso_axis(a)
+            if tref is None or ti is None:
+                row.append(' xx')
+                continue
+            dx = int(round(tref - ti))
+            if abs(dx) < MIN_SHIFT:
                 row.append('  0')
                 continue
+            dx = max(-MAX_SHIFT, min(MAX_SHIFT, dx))
             # 收小平移量，避免丢掉出界的内容
             while dx != 0 and lost(a, dx) > 0:
                 dx -= 1 if dx > 0 else -1
