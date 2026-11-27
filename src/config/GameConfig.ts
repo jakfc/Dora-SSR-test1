@@ -76,6 +76,10 @@ export interface PierConfig {
 	BROKEN_SIDE_RATIO: number;
 	REVENGE_DELAY_SECONDS: number;
 	REVENGE_COUNT: number;
+	/** 对码头出拳/麒麟步的伤害与判定范围 */
+	HIT_DAMAGE: number;
+	HIT_BOX_HALF: number;
+	HIT_REACH: number;
 	// 旧字段（保留兼容）：语义同 SABOTAGE_DAMAGE / REPAIR_AMOUNT，
 	// REPAIR_SILVER 是主角修栈桥一次要花的银两。
 	HIT_HP: number;
@@ -311,6 +315,12 @@ export const GameConfig = {
 		REVENGE_DELAY_SECONDS: 25,
 		// 每砸一锤欠下的血债（人）；拆断那一刻再额外记 REVENGE_COUNT 人
 		REVENGE_COUNT: 3,
+		// 对码头出拳/麒麟步一下多少伤害（和拆桥同一档）
+		HIT_DAMAGE: 45,
+		// 码头受击判定半宽（世界单位）：原地站着打也要够得着
+		HIT_BOX_HALF: 96,
+		// 攻击伸出码头的额外距离（出拳的刀刃/冲刺的余势）
+		HIT_REACH: 46,
 		// 旧字段保留（有老代码引用），语义同 SABOTAGE_DAMAGE / REPAIR_AMOUNT
 		HIT_HP: 45,
 		REPAIR_HP: 60,
@@ -350,6 +360,13 @@ export const GameConfig = {
 			upgradeCost: 9,
 			color: 0xff4a5568,
 		},
+	},
+	// 麒麟步是「号令」不是「砍人」：主角冲过去的那一段防线上，敌台会立刻替你发箭。
+	QILIN: {
+		// 算「这一段防线」的距离：敌台与主角出发点的水平距离
+		TOWER_RANGE: 560,
+		// 号令加持下的出箭威力倍数（比常驻自动开火重一点，才值一个指令）
+		DAMAGE_SCALE: 1.6,
 	},
 
 	// ---- 镜头取景 ----
@@ -560,7 +577,7 @@ export const GameConfig = {
 			height: 150,
 			color: 0xff4a3b28,
 			description: '西面这一段栈桥一直留着没动：贼船靠在这里，鬼子从这里下滩。',
-			interactHint: '栈桥好好的，西边的贼船会成建制上来；把它拆了就只剩散兵。',
+			interactHint: '对淮栈桥出拳 [空格] 或麒麟步 [J] 可砍断它；按 [E] 花 2 两修桥。',
 		},
 		EAST_PIER: {
 			id: 'EAST_PIER',
@@ -571,7 +588,7 @@ export const GameConfig = {
 			height: 150,
 			color: 0xff4a3b28,
 			description: '东面这一段栈桥一直留着没动：贼船靠在这里，鬼子从这里下滩。',
-			interactHint: '栈桥好好的，东边的贼船会成建制上来；把它拆了就只剩散兵。',
+			interactHint: '对淮栈桥出拳 [空格] 或麒麟步 [J] 可砍断它；按 [E] 花 2 两修桥。',
 		},
 	} as Record<LandmarkId, LandmarkConfig>,
 

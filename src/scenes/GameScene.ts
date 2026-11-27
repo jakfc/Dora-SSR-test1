@@ -1385,10 +1385,63 @@ export function GameScene(): Node.Type {
 	 * 普通攻击（空格 / L / HUD「出拳」）：不位移的短打。
 	 * 麒麟步是「冲过去一记重手」，这个是站着也能连的平A，两者冷却各算各的。
 	 */
+	/**
+	 * 砍中码头：砸桥是「攻击行为」，不是「交互」。
+	 * 每刀记 1 点人头债，砍断那一刻再额外记 REVENGE_COUNT——所以拆桥爽一时，当夜还账。
+	 */
+	const damagePier = (side: 'W' | 'E', pierX: number, amount: number): void => {
+		if (!gs.pierAlive(side)) return;
+		const before = gs.pierHpOf(side);
+		const after = Math.max(0, before - amount);
+		gs.setPierHp(side, after);
+		gs.addPierRevenge(side, 1);
+		playFx(worldLayer, 'fx_arrow_hit', pierX, GameConfig.GROUND_Y + 46, 0.25, 0.3, 8);
+		pulseArtAtX(pierX, 0.06, 0.22);
+		soundSfx('build_hammer');
+		const sideName = side === 'W' ? '西' : '东';
+		if (after <= 0) {
+			gs.addPierRevenge(side, GameConfig.PIER.REVENGE_COUNT);
+			refreshEnvironmentVisuals();
+			hud.showToast(
+				`【${sideName}滩倭寇码头】栈桥断成两截！${sideName}岸从此只上散兵，但砍桥的账今夜会来讨。`,
+				3.0
+			);
+		} else {
+			hud.showToast(`栈桥 ${after}/${gs.pierMaxHp}，再砍几下就断。`, 1.4);
+		}
+	};
+
+	/**
+	 * 攻击扫过的区间 [x0, x1] 碰到哪座码头，就把它当作受击目标。
+	 * 判定把码头身位放宽 HIT_BOX_HALF，所以站在岸边原地出拳也够得着；
+	 * 麒麟步则是从起手点到落点一路扫过去，能隔着半座桥打到。
+	 */
+	const attackPiers = (x0: number, x1: number, amount: number): boolean => {
+		const lo = Math.min(x0, x1);
+		const hi = Math.max(x0, x1);
+		let hit = false;
+		const piers: Array<{ id: LandmarkId; side: 'W' | 'E' }> = [
+			{ id: 'WEST_PIER', side: 'W' },
+			{ id: 'EAST_PIER', side: 'E' },
+		];
+		for (const p of piers) {
+			const pierX = GameConfig.MAP_LANDMARKS[p.id].x;
+			if (!gs.pierAlive(p.side)) continue;
+			const half = GameConfig.PIER.HIT_BOX_HALF;
+			if (hi < pierX - half || lo > pierX + half) continue;
+			damagePier(p.side, pierX, amount);
+			hit = true;
+		}
+		return hit;
+	};
+
 	const lightAttack = (): void => {
 		if (waitingVictoryModal) return;
 		const res = player.triggerLightAttack(enemies);
 		if (!res.triggered) return;
+		// 拳头也能砍栈桥：以主角为中心往朝向伸出 HIT_REACH
+		const reach = GameConfig.PLAYER.lightRange + GameConfig.PIER.HIT_REACH;
+		attackPiers(player.x - GameConfig.PIER.HIT_BOX_HALF, player.x + player.facing * reach, GameConfig.PIER.HIT_DAMAGE);
 		if (res.hitCount > 0) {
 			// 命中才飘字，抡空不脏屏；命中的敌人头顶另起一个小火花
 			addFloatingText(
@@ -1400,7 +1453,33 @@ export function GameScene(): Node.Type {
 		}
 	};
 
-	/** [F] 撒银退敌：给最近的倭寇一笔银子，让他掉头离场（头目只买得到一瞬喘息） */	const bribeNearestEnemy = () => {
+	/**
+	 * 麒麟步号令：主角一冲，冲锋扫过的整段都算攻击范围，而且这条防线上的敌台
+	 * 会立刻替他出箭。主角自己不加伤害——「弟兄们看见卫所官冲阵，替你放箭」。
+	 */
+	const qilinAttack = (fromX: number): void => {
+		// ① 扫过的整段都算攻击范围：从起手点到落点 + 刀刃余势
+		const reach = GameConfig.PLAYER.attackRange + GameConfig.PIER.HIT_REACH;
+		attackPiers(
+			Math.min(fromX, player.x) - GameConfig.PIER.HIT_BOX_HALF,
+			Math.max(fromX, player.x) + player.facing * reach,
+			GameConfig.PLAYER.attackDamage
+		);
+		// ② 这一段城墙上的敌台应令发矢
+		let fired = 0;
+		for (const t of towers) {
+			if (!t.state.unlocked || t.state.hp <= 0) continue;
+			if (Math.abs(t.state.x - fromX) > GameConfig.QILIN.TOWER_RANGE) continue;
+			if (t.forceFire(enemies, player.x)) fired++;
+		}
+		if (fired > 0) {
+			addFloatingText(`敌台发矢 ×${fired}`, player.x, GameConfig.GROUND_Y + 128, 0xff90cdf4);
+			playFx(worldLayer, 'fx_levelup', player.x, GameConfig.GROUND_Y + 110, 0.5, 0.3, 12);
+		}
+	};
+
+	/** [F] 撒银退敌：给最近的倭寇一笔银子，让他掉头离场（头目只买得到一瞬喘息） */
+	const bribeNearestEnemy = () => {
 		if (waitingVictoryModal) return;
 		let target: Enemy | undefined = undefined;
 		let bestDist = GameConfig.BRIBE_RANGE;
@@ -1492,30 +1571,14 @@ export function GameScene(): Node.Type {
 		}
 
 		// 两头的倭寇码头：完好时那一侧成建制上岸（还会多运一船人），
-		// 拆了那一侧只剩散兵摸上来；但砸一锤记一个人头债，当夜就连本带利还回来。
+		// 砸断那一侧只剩散兵摸上来；但每砸一下记一个人头债，当夜就连本带利还回来。
+		// 注意：砸桥是「攻击」不是「交互」——用普通攻击或麒麟步打，
+		// 走到跟前按 [E] 只做一件事：花银两把断桥修回来。
 		if (landmark === 'WEST_PIER' || landmark === 'EAST_PIER') {
 			const side: 'W' | 'E' = landmark === 'WEST_PIER' ? 'W' : 'E';
 			const sideName = side === 'W' ? '西' : '东';
 			const pierX = GameConfig.MAP_LANDMARKS[landmark].x;
-			if (gs.pierAlive(side)) {
-				const before = gs.pierHpOf(side);
-				const after = Math.max(0, before - GameConfig.PIER.SABOTAGE_DAMAGE);
-				gs.setPierHp(side, after);
-				gs.addPierRevenge(side, 1);
-				playFx(worldLayer, 'fx_arrow_hit', pierX, GameConfig.GROUND_Y + 40, 0.25, 0.3, 8);
-				pulseArtAtX(pierX, 0.05, 0.2);
-				soundSfx('build_hammer');
-				if (after <= 0) {
-					gs.addPierRevenge(side, GameConfig.PIER.REVENGE_COUNT);
-					refreshEnvironmentVisuals();
-					hud.showToast(
-						`【${sideName}滩倭寇码头】栈桥断成两截！${sideName}岸从此只上散兵，但砸桥的账今夜会来讨。`,
-						3.0
-					);
-				} else {
-					hud.showToast(`栈桥 ${after}/${gs.pierMaxHp}，再砸几下就断。`, 1.6);
-				}
-			} else {
+			if (!gs.pierAlive(side)) {
 				const cost = GameConfig.PIER.REPAIR_SILVER;
 				if (!gs.spendSilver(cost)) {
 					hud.showToast(`修栈桥要 ${cost} ${GameConfig.SILVER_NAME}，库里不够。`, 1.8);
@@ -1527,6 +1590,11 @@ export function GameScene(): Node.Type {
 				hud.showToast(
 					`${sideName}岸栈桥复工：贼船又能靠岸（那一侧也会多运一船人上来）。`,
 					2.6
+				);
+			} else {
+				hud.showToast(
+					`栈桥 ${gs.pierHpOf(side)}/${gs.pierMaxHp}。要拆它就对着桥出拳 [空格] 或麒麟步 [J]，别按 [E]。`,
+					2.0
 				);
 			}
 			return;
@@ -1766,9 +1834,11 @@ export function GameScene(): Node.Type {
 		onLightAttack: () => lightAttack(),
 		onQilinStep: () => {
 			if (waitingVictoryModal) return;
+			const fromX = player.x;
 			const res = player.triggerQilinStep(enemies);
 			if (res.triggered) {
 				addFloatingText('王家拳·麒麟步！', player.x, GameConfig.GROUND_Y + 108, 0xfff6ad55);
+				qilinAttack(fromX);
 			}
 		},
 		onRally: () => {
@@ -1834,9 +1904,11 @@ export function GameScene(): Node.Type {
 		// 普通攻击：空格或 L（按下即出，不等释放），快节奏连段
 		if (Keyboard.isKeyPressed(KeyName.Space) || Keyboard.isKeyPressed(KeyName.L)) lightAttack();
 		if (Keyboard.isKeyDown(KeyName.J)) {
+			const fromX = player.x;
 			const res = player.triggerQilinStep(enemies);
 			if (res.triggered) {
 				addFloatingText('王家拳·麒麟步！', player.x, GameConfig.GROUND_Y + 108, 0xfff6ad55);
+				qilinAttack(fromX);
 			}
 		}
 		if (Keyboard.isKeyDown(KeyName.K)) {

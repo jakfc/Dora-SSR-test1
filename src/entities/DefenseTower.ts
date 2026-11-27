@@ -188,10 +188,45 @@ export class DefenseTower {
 		if (!target) return;
 
 		this.cooldownTimer = stats.cooldown;
+		this.shoot(target, 1);
+	}
+
+	/**
+	 * 麒麟步号令：不管冷却，立刻朝主角冲过去那一段最多的敌人放一箭。
+	 * 只打自己射程内的目标：这段城墙上没敌台，号令就没回应。
+	 * 返回是否真的出了手。
+	 */
+	public forceFire(enemies: Enemy[], preferX: number): boolean {
+		if (!this.state.unlocked || this.state.hp <= 0) return false;
+		const stats = GameConfig.TOWER_STATS[this.state.type];
+		let target: Enemy | undefined = undefined;
+		let best = stats.range + 1;
+		for (const e of enemies) {
+			if (e.dead) continue;
+			if (Math.abs(e.x - this.state.x) > stats.range) continue;
+			const d = Math.abs(e.x - preferX);
+			if (d <= best) {
+				best = d;
+				target = e;
+			}
+		}
+		if (target === undefined) return false;
+		// 号令加速：下一次自动开火只等一半冷却
+		this.cooldownTimer = stats.cooldown * 0.5;
+		this.shoot(target, GameConfig.QILIN.DAMAGE_SCALE);
+		return true;
+	}
+
+	/** 出一发（箭/砲）。scale 是威力倍数，号令时 > 1。 */
+	private shoot(target: Enemy, scale: number): void {
+		const stats = GameConfig.TOWER_STATS[this.state.type];
 		soundSfx(this.state.type === 'CANNON' ? 'cannon_fire' : 'arrow_shoot');
 		// 宗祠士气亦鼓舞炮手：每级 +12% 威力
 		const dmg = Math.round(
-			stats.damage * (1 + 0.25 * (this.state.level - 1)) * (1 + GameState.instance.moraleBonus)
+			stats.damage *
+				(1 + 0.25 * (this.state.level - 1)) *
+				(1 + GameState.instance.moraleBonus) *
+				scale
 		);
 		const speed = this.state.type === 'CANNON' ? 480 : 680;
 		const dist = Math.max(40, Math.abs(target.x - this.state.x));
