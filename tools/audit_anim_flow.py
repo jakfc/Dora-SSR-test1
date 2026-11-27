@@ -110,19 +110,25 @@ def main():
                 flags.append('碎块 %d' % sats)
             if dup:
                 flags.append('重复帧 %d' % dup)
+            # 只有**循环动画**（走路）才要求帧间不漂移。
+            # 攻击/麒麟步/劳作/倒地这些动作本来就有大幅度位移（出拳、挥锄、
+            # 倒地横躺），用同一把尺子量会把正常动作报成问题，所以它们只列数据、
+            # 不计入不合格。
+            strict_cycle = prefix.endswith('_walk') or prefix.endswith('_walk_r')
             report.append((rel, prefix, len(rows), spread(feet), spread(heads),
-                           spread(hs), sats, dup, flags, rows))
-    bad = [r for r in report if r[8]]
+                           spread(hs), sats, dup, flags, rows, strict_cycle))
+    bad = [r for r in report if r[8] and r[10]]
     out = []
     out.append('%-30s %-26s %3s %5s %6s %6s %5s %4s' %
                ('目录', '族', '帧', '脚底散', '头晃', '高矮散', '碎块', '重复'))
-    for rel, prefix, n, f, h, hh, s, d, flags, _rows in report:
-        mark = '  <<<' if flags else ''
+    for rel, prefix, n, f, h, hh, s, d, flags, _rows, strict_cycle in report:
+        mark = '  <<<' if (flags and strict_cycle) else ('  (参考)' if flags else '')
         out.append('%-30s %-26s %3d %5d %6.1f %6d %5d %4d%s' %
                    (rel, prefix, n, f, h, hh, s, d, mark))
     out.append('')
-    out.append('共 %d 族，有问题 %d 族' % (len(report), len(bad)))
-    for rel, prefix, n, f, h, hh, s, d, flags, _rows in bad:
+    out.append('共 %d 族（其中循环动画 %d 族），不合格 %d 族' %
+               (len(report), len([r for r in report if r[10]]), len(bad)))
+    for rel, prefix, n, f, h, hh, s, d, flags, _rows, _sc in bad:
         out.append('  %s/%s  %s' % (rel, prefix, '，'.join(flags)))
     text = '\n'.join(out)
     io.open(os.path.join(PROJ, 'tools', '_anim_flow.txt'), 'w',

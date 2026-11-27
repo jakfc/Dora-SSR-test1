@@ -15,19 +15,19 @@ export const FRAME_SCALE: Record<string, number> = {
   'assets/sprites/enemies/enemy_scout_attack_02.png': 1.92, // attack 高81 / 人高基准156
   'assets/sprites/enemies/enemy_scout_attack_r_02.png': 1.968, // attack 高79 / 人高基准156
   'assets/sprites/player/player_attack_01.png': 1.492, // attack 高118 / 人高基准176
-  'assets/sprites/player/player_attack_02.png': 1.6, // attack 高110 / 人高基准176
+  'assets/sprites/player/player_attack_02.png': 1.76, // attack 高100 / 人高基准176
   'assets/sprites/player/player_attack_03.png': 1.467, // attack 高120 / 人高基准176
   'assets/sprites/player/player_hurt_01.png': 1.285, // hurt 高137 / 人高基准176
   'assets/sprites/player/player_qilin_01.png': 1.333, // qilin 高132 / 人高基准176
   'assets/sprites/player/player_qilin_02.png': 1.313, // qilin 高134 / 人高基准176
-  'assets/sprites/player/player_qilin_03.png': 1.304, // qilin 高135 / 人高基准176
+  'assets/sprites/player/player_qilin_03.png': 1.344, // qilin 高131 / 人高基准176
   'assets/sprites/villagers/villager_kung_fu_walk_01.png': 0.694, // walk 高180 / 人高基准125
   'assets/sprites/villagers/villager_kung_fu_walk_02.png': 0.694, // walk 高180 / 人高基准125
   'assets/sprites/villagers/villager_kung_fu_walk_03.png': 0.698, // walk 高179 / 人高基准125
   'assets/sprites/villagers/villager_kung_fu_walk_05.png': 0.694, // walk 高180 / 人高基准125
   'assets/sprites/villagers/villager_kung_fu_walk_06.png': 0.694, // walk 高180 / 人高基准125
   'assets/sprites/villagers/villager_militia_attack_01.png': 1.579, // attack 高114 / 人高基准180
-  'assets/sprites/villagers/villager_militia_attack_02.png': 1.682, // attack 高107 / 人高基准180
+  'assets/sprites/villagers/villager_militia_attack_02.png': 1.714, // attack 高105 / 人高基准180
 };
 
 /** 取某帧的显示倍率；表里没有就是 1。 */
