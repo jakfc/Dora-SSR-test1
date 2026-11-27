@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
 import { GameConfig, VillagerRole } from 'src/config/GameConfig';
 import { GameState, BuildProject } from 'src/config/GameState';
 import { Enemy } from 'src/entities/Enemy';
-import { ANIM_FPS, artAnimCount, artAnimFace, artAnimInto, artHide, artReady } from 'src/config/Assets';
+import { animAccByMove, animAccByTime, animFrameOf, artAnimCount, artAnimFace, artAnimInto, artHide, artReady } from 'src/config/Assets';
 import { soundSfx } from 'src/audio/Sound';
 
 export interface ToolDrop {
@@ -75,7 +75,8 @@ export class Villager {
 	private shockwaveTimer = 0;
 
 	// 逐帧动画状态
-	private animClock = 0;
+	private animName = '';
+	private animAcc = 0;
 	private animPrevX: number;
 	/** 朝向：+1 向右，-1 向左。由实际位移推出，走路时转身 */
 	private facing = 1;
@@ -225,13 +226,20 @@ export class Villager {
 			artHide(this.artNode);
 			return;
 		}
-		// 动画时钟不走 GAME_SPEED 的减速：否则 6 帧的走路循环会掉到 ~8fps，看起来一颜一颜的
-		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
-		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
-		// 站立/劳作时把帧锒在各自的一帧上（用 id 错开），而不是从第 0 帧原地踏步
-		const offset = this.id % Math.max(1, frames);
-		const frame = name === 'walk' ? this.animClock * fps + offset : offset;
-		artAnimInto(this.artNode, styleId, prefix, frame);
+		// 换动作就把推进量归零：出拳/劳作一定从第 1 帧起，不从半截插入
+		if (this.animName !== name) {
+			this.animName = name;
+			this.animAcc = 0;
+		}
+		const animDt = dt * GameConfig.ANIM_TIME_SCALE;
+		// 走路按实际走过的距离推进（脚步跟地，不打滑）；其余按该动作的整轮时长推进
+		this.animAcc =
+			name === 'walk'
+				? animAccByMove(this.animAcc, frames, Math.abs(dx))
+				: animAccByTime(name, this.animAcc, frames, animDt);
+		// 站立/劳作时把帧错开（用 id），免得一村人同手同脚
+		const idleOffset = name === 'walk' || name === 'attack' ? 0 : this.id % Math.max(1, frames);
+		artAnimInto(this.artNode, styleId, prefix, animFrameOf(name, this.animAcc, frames) + idleOffset);
 		// 村民也要转身：以前这里的挂点从不镜像，向左走的人一直倒着走
 		artAnimFace(this.artNode, styleId, this.facing < 0);
 	}

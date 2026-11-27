@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
 import { GameConfig, LandmarkId } from 'src/config/GameConfig';
 import { Enemy } from 'src/entities/Enemy';
 import { Villager } from 'src/entities/Villager';
-import { ANIM_FPS, artAnimCount, artAnimFace, artAnimInto, artHide, artReady } from 'src/config/Assets';
+import { animAccByMove, animAccByTime, animFrameOf, artAnimCount, artAnimFace, artAnimInto, artHide, artReady } from 'src/config/Assets';
 import { playFx } from 'src/ui/Fx';
 import { soundSfx } from 'src/audio/Sound';
 
@@ -42,7 +42,8 @@ export class Player {
 	public rallyCooldownTimer = 0;
 	public auraTimer = 0;
 	private slashFxTimer = 0;
-	private animClock = 0;
+	private animName = '';
+	private animAcc = 0;
 	private animPrevX: number = GameConfig.PLAYER.startX;
 
 	constructor() {
@@ -109,7 +110,8 @@ export class Player {
 
 	/** 每帧推进主角动画：预步 / 普通攻击 / 行走 / 站立，缺帧逐级回退。 */
 	private tickAnim(dt: number): void {
-		const moving = Math.abs(this.x - this.animPrevX) > 0.5;
+		const moveDx = this.x - this.animPrevX;
+		const moving = Math.abs(moveDx) > 0.5;
 		this.animPrevX = this.x;
 		let name = 'idle';
 		if (this.slashFxTimer > 0) name = this.auraTimer > 0 ? 'qilin' : 'attack';
@@ -129,9 +131,18 @@ export class Player {
 			artHide(this.artNode);
 			return;
 		}
-		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
-		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
-		artAnimInto(this.artNode, 'player_idle', prefix, this.animClock * fps);
+		// 换动作就把推进量归零：出拳/麒麟步一定从第 1 帧起，不从半截插入
+		if (this.animName !== name) {
+			this.animName = name;
+			this.animAcc = 0;
+		}
+		const animDt = dt * GameConfig.ANIM_TIME_SCALE;
+		// 走路按实际走过的距离推进（脚步跟地，不打滑）；其余按该动作的整轮时长推进
+		this.animAcc =
+			name === 'walk'
+				? animAccByMove(this.animAcc, frames, Math.abs(moveDx))
+				: animAccByTime(name, this.animAcc, frames, animDt);
+		artAnimInto(this.artNode, 'player_idle', prefix, animFrameOf(name, this.animAcc, frames));
 		artAnimFace(this.artNode, 'player_idle', this.facing < 0);
 	}
 

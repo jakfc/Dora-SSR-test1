@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Sprite, Vec2 } from 'Dora';
 import { EnemyType, GameConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Villager } from 'src/entities/Villager';
-import { ANIM_FPS, artAnimCount, artAnimInto, artHide, artReady, artStretch } from 'src/config/Assets';
+import { animAccByMove, animAccByTime, animFrameOf, artAnimCount, artAnimInto, artHide, artReady, artStretch } from 'src/config/Assets';
 import { soundSfx } from 'src/audio/Sound';
 
 function drawRect(
@@ -52,7 +52,8 @@ export class Enemy {
 	private bribeStunTimer = 0;
 	private attackTimer = 0;
 	private hitFlashTimer = 0;
-	private animClock = 0;
+	private animName = '';
+	private animAcc = 0;
 	private animPrevX: number;
 
 	constructor(type: EnemyType, spawnX = GameConfig.SPAWN_EAST_X, side: 'W' | 'E' = 'E') {
@@ -198,13 +199,21 @@ export class Enemy {
 			artHide(this.artNode);
 			return;
 		}
-		// 动画时钟不走 GAME_SPEED 的减速，和族丁/主角一致，保持步伐颚率
-		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
-		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
+		// 换动作就把推进量归零：出拳一定从第 1 帧起
+		if (this.animName !== name) {
+			this.animName = name;
+			this.animAcc = 0;
+		}
+		const animDt = dt * GameConfig.ANIM_TIME_SCALE;
+		// 走路按实际走过的距离推进（脚步跟地，不打滑）；其余按该动作的整轮时长推进
+		this.animAcc =
+			name === 'walk'
+				? animAccByMove(this.animAcc, frames, Math.abs(moveDx))
+				: animAccByTime(name, this.animAcc, frames, animDt);
 		// 朝右有专门画好的帧（`*_r_NN`）就直接用：左右各一套贴图，比整体镜像干净
 		const useRightArt = this.faceRight && artAnimCount(styleId, `${prefix}_r`) > 0;
 		if (useRightArt) prefix = `${prefix}_r`;
-		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
+		artAnimInto(this.artNode, styleId, prefix, animFrameOf(name, this.animAcc, frames));
 		// 主图原生朝左：用左套图时朝右要翻；用右套图（原生朝右）时不翻
 		this.artNode.scaleX = useRightArt ? 1 : this.faceRight ? -1 : 1;
 	}

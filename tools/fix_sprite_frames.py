@@ -137,14 +137,11 @@ def align_family(dirpath, fam, lines, apply_it):
             continue
         x0, x1, y0, y1 = box
         ch = y1 - y0 + 1
-        special = ('_fall' in stem or '_death' in stem or '_hurt' in stem
-                   or ch < POSE_RATIO * b_ch)
-        if special:
-            s = 1.0
-        else:
-            s = max(SCALE_MIN, min(SCALE_MAX, b_ch / float(ch), (H - 2) / float(ch)))
-        if abs(s - 1.0) < 0.01:
-            s = 1.0
+        # 铁律：逐帧只许平移，絶不允许按「内容高」缩放。
+        # （按内容高缩放会把出拳半蹲这类本来就矮的帧拉大、把高的帧压小，
+        #   历史上就是它把攻击/麒麟步帧整体缩了 13%。要放大某帧请用 FrameScale 表。）
+        s = 1.0
+        _ = ch  # 内容高仅用于报告，不参与缩放
         if s != 1.0:
             nw = max(1, int(round(W * s)))
             nh = max(1, int(round(H * s)))
@@ -220,11 +217,16 @@ def fix_2x(lines, apply_it):
 
 def main():
     apply_it = '--apply' in sys.argv
-    only = None
+    # 默认只重建 @2x（安全：永远不动 1x）。
+    # 1x 对基是「会改画面」的操作，必须显式 --align 才会跑，
+    # 否则它会把 align_walk_frames.py 刚做好的横向对齐又挪回去。
+    only = '2x'
     if '--fix2x' in sys.argv:
         only = '2x'
     if '--align' in sys.argv:
         only = 'align'
+    if '--all' in sys.argv:
+        only = None
     lines = []
     if only in (None, 'align'):
         for d in DIRS:

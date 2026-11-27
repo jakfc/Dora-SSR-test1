@@ -674,3 +674,55 @@ export const ANIM_FPS: Record<string, number> = {
 	qilin: 10,
 	hurt: 4,
 };
+
+/**
+ * 一次动作「整轮」的时长（秒）—— **和帧数无关**。
+ * 按帧率播动画时，4 帧的倭寇和 6 帧的村民节奏会不一样（快的太快、慢的太慢）；
+ * 改成按整轮时长算帧号，各族节奏就一致了。
+ */
+export const ANIM_CYCLE: Record<string, number> = {
+	idle: 2.6,
+	work: 1.2,
+	walk: 0.62,
+	// 0.22 = 主角出手窗口（slashFxTimer）的长度：改这个数要同时看玩家出手时长，
+	// 否则 3 帧的出拳会播不完，看不到最后那下伸拳。
+	attack: 0.22,
+	qilin: 0.5,
+	fall: 0.5,
+	hurt: 0.3,
+};
+
+/** 走路一整轮循环对应的地面距离（设计像素）：脚步按位移推进，所以不会滑步。 */
+export const WALK_STRIDE = 76;
+
+/** 一次性动作：播完就停住（倒地、受伤），不要绕着圈。 */
+function isOnceAnim(name: string): boolean {
+	return name === 'fall' || name === 'hurt';
+}
+
+/**
+ * 按「时间」推进动画，返回新的推进量（单位是帧）。
+ * dt 请传**已经乘过 ANIM_TIME_SCALE** 的值。
+ */
+export function animAccByTime(name: string, acc: number, n: number, dt: number): number {
+	if (n <= 0) return acc;
+	const cycle = ANIM_CYCLE[name] !== undefined ? ANIM_CYCLE[name] : 0.6;
+	return acc + (n * dt) / cycle;
+}
+
+/** 按「走过的距离」推进走路动画，返回新的推进量（单位是帧）。 */
+export function animAccByMove(acc: number, n: number, movedPx: number): number {
+	if (n <= 0) return acc;
+	return acc + (n * movedPx) / WALK_STRIDE;
+}
+
+/**
+ * 当前该显示第几帧（0 基）。
+ * 换动作时要把推进量归零，出拳才会从第 1 帧起，而不是从半截开始。
+ */
+export function animFrameOf(name: string, acc: number, n: number): number {
+	if (n <= 0) return 0;
+	if (isOnceAnim(name) && acc >= n) return n - 1;
+	const i = Math.floor(acc) % n;
+	return i < 0 ? i + n : i;
+}
