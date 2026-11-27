@@ -1986,14 +1986,7 @@ export function GameScene(): Node.Type {
 		const nearestLandmark = player.update(clampedDt, moveInput);
 		// 主角脚下标记：镜头拉近、人一多，一眼就能认出王叔杲
 		playerMarkDraw.clear();
-		const markPulse = 0.5 + Math.sin(waterClock * 2.4) * 0.5;
-		playerMarkDraw.drawEllipse(
-			Vec2(player.x, GameConfig.GROUND_Y + 1),
-			30 + markPulse * 5,
-			9 + markPulse * 3,
-			Color(0x55f6e05e)
-		);
-		drawRect(playerMarkDraw, player.x - 13, GameConfig.GROUND_Y - 1, 26, 2, 0x88f6e05e);
+		// 主角脚下不再画黄色光圈/横线：不再用标记圈人，靠美术和镜头认主角
 		for (const t of towers) t.setNearby(Math.abs(t.state.x - player.x) < 300);
 
 		// 探路：只有主角王叔杲亲自走到未探明地界才算「探明」（族丁不算，但他们仍能从雾里被看见）
