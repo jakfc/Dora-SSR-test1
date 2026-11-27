@@ -232,22 +232,26 @@ export class Player {
 
 		// 刀光必须画在「冲拳之后」的位置：先位移再出光，否则光会留在起手点、
 		// 人已经窜出去一个身位，看起来就是「特效位置不对」。
+		// y 是特效的「中心」（fx_slash 用 ay:0.5），所以给胸口高度：
+		// 弧顶刚过头、弧底扫到脚，不再是以前那样浮在头顶上。
 		playFx(
 			this.node.parent,
 			'fx_slash',
-			this.x + this.facing * 46,
-			GameConfig.GROUND_Y + 52,
+			this.x + this.facing * 40,
+			GameConfig.GROUND_Y + 32,
 			0.26,
 			0.35,
 			0,
 			this.facing < 0
 		);
+		// 脚踏地皮的一圈冲击波：冲刺落点分脚，不是浮在半空
+		playFx(this.node.parent, 'fx_shockwave', this.x, GameConfig.GROUND_Y + 4, 0.3, 0.8, 0);
 		// 身后补一道残影，让 110 像素的位移有轨迹感
 		playFx(
 			this.node.parent,
 			'fx_slash',
 			(oldX + this.x) / 2,
-			GameConfig.GROUND_Y + 44,
+			GameConfig.GROUND_Y + 30,
 			0.2,
 			0.6,
 			0,
@@ -291,8 +295,8 @@ export class Player {
 		playFx(
 			this.node.parent,
 			'fx_slash',
-			this.x + this.facing * 34,
-			GameConfig.GROUND_Y + 46,
+			this.x + this.facing * 30,
+			GameConfig.GROUND_Y + 30,
 			0.18,
 			0.28,
 			0,

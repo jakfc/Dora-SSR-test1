@@ -82,6 +82,8 @@ export interface PierConfig {
 	HIT_REACH: number;
 	/** 砸码头当场招来的抢滩小队（不等到夜里） */
 	HITS_PER_GUARD: number;
+	GUARD_PER_HIT: number;
+	GUARD_ALIVE_CAP: number;
 	GUARD_WAVE_MAX: number;
 	BREAK_GUARD_COUNT: number;
 	GUARD_SPAWN_OFFSET: number;
@@ -327,12 +329,16 @@ export const GameConfig = {
 		HIT_BOX_HALF: 96,
 		// 攻击伸出码头的额外距离（出拳的刀刃/冲刺的余势）
 		HIT_REACH: 46,
-		// 每砸中一锤，岸边贼船立刻放人抢滩（不等到夜里）：每 HITS_PER_GUARD 锤出一人
-		HITS_PER_GUARD: 2,
+		// 每砸中一锤，岸边贼船立刻放人抢滩（不等到夜里）
+		HITS_PER_GUARD: 1,
+		// 每锤当场上滩的人数（众目睽睽：砸一下就一船人扑上来）
+		GUARD_PER_HIT: 3,
+		// 同时存活的抢滩兵上限（多了会卡，也给玩家翻盘余地）
+		GUARD_ALIVE_CAP: 18,
 		// 抢滩小队开局人数上限（拆断前的零碎回击）
 		GUARD_WAVE_MAX: 6,
 		// 拆断那一刻的报复人数（当场就冲上来）
-		BREAK_GUARD_COUNT: 3,
+		BREAK_GUARD_COUNT: 6,
 		// 抢滩小队的出生点相对码头再往岸上让多少（免得生在栈桥里）
 		GUARD_SPAWN_OFFSET: 90,
 		// 旧字段保留（有老代码引用），语义同 SABOTAGE_DAMAGE / REPAIR_AMOUNT

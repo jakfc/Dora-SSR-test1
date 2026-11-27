@@ -563,6 +563,9 @@ export function GameScene(): Node.Type {
 
 	// 火把光晕贴图挂点
 	const torchArtNode = Node();
+	// 拆断的栈桥残片（浪里散落的断板）：单独一层，开夜/刷新时重画
+	const pierDebrisNode = Node();
+	worldLayer.addChild(pierDebrisNode);
 	worldLayer.addChild(torchArtNode);
 
 	// 点击地面移动交互层
@@ -774,6 +777,10 @@ export function GameScene(): Node.Type {
 		gatesDraw.clear();
 		// 火把光晕用 artAt 直接创建，每次刷新前先清空，避免重复叠加
 		torchArtNode.removeAllChildren();
+		// 断桥残片同理：先清空再按「哪一侧断了」重画，保证拆完一直是断的样子
+		pierDebrisNode.removeAllChildren();
+		if (!gs.pierAlive('W')) paintPierWreck('W');
+		if (!gs.pierAlive('E')) paintPierWreck('E');
 		// 注意：城门 / 宗祠挂点用 artInto，靠节点 tag 判断是否已建过精灵，
 		// 这里千万不能 removeAllChildren，否则 tag 还在、精灵没了，城门会凭空消失。
 
@@ -1408,16 +1415,35 @@ export function GameScene(): Node.Type {
 			side === 'W'
 				? Math.min(GameConfig.MAP_WIDTH - 120, pierX + off)
 				: Math.max(120, pierX - off);
-		for (let i = 0; i < count; i++) {
+		// 场上人太多就先不加：既防卡顿，也给玩家喘口气的余地
+		const alive = enemies.filter((e) => !e.dead && !e.escaped).length;
+		const room = Math.max(0, GameConfig.PIER.GUARD_ALIVE_CAP - alive);
+		const n = Math.min(count, room);
+		for (let i = 0; i < n; i++) {
+			// 散兵占大头，但每三个夹一个武士——一上一下的压迫感差很多
 			const type: EnemyType = i % 3 === 2 ? 'SAMURAI' : 'SCOUT';
-			const enemy = new Enemy(type, shoreX + (side === 'W' ? i * 26 : -i * 26), side);
+			// 拉成一条抢滩纵列，不要堆在同一个像素上
+			const stagger = 26 + i * 34;
+			const enemy = new Enemy(type, side === 'W' ? shoreX + stagger : shoreX - stagger, side);
 			enemies.push(enemy);
 			worldLayer.addChild(enemy.node);
 		}
 		playFx(worldLayer, 'fx_shockwave', shoreX, GameConfig.GROUND_Y + 26, 0.6, 0.6, 0);
-		playFx(worldLayer, 'fx_torch_glow', shoreX, GameConfig.GROUND_Y + 96, 0.9, 0.35, 12);
-		addFloatingText('贼船在放人上岸！', shoreX, GameConfig.GROUND_Y + 140, 0xfffc8181);
+		playFx(worldLayer, 'fx_torch_glow', shoreX, GameConfig.GROUND_Y + 60, 0.9, 0.35, 12);
+		addFloatingText(`贼船在放人上岸！×${n}`, shoreX, GameConfig.GROUND_Y + 140, 0xfffc8181);
 		soundSfx('drum_rally');
+	};
+
+	/**
+	 * 拆断栈桥后的现场：浪里散板 + 余烟，桥永远看着是断的。
+	 */
+	const paintPierWreck = (side: 'W' | 'E'): void => {
+		const pierX = GameConfig.MAP_LANDMARKS[side === 'W' ? 'WEST_PIER' : 'EAST_PIER'].x;
+		for (let i = 0; i < 6; i++) {
+			const dx = (i % 2 === 0 ? -1 : 1) * (18 + i * 21);
+			// 浪里的断板：逐张半沉、不整齐，看着像散落的碎木
+			artAt(pierDebrisNode, 'salvage_driftwood', pierX + dx, GameConfig.GROUND_Y + 6 + (i % 3) * 7);
+		}
 	};
 
 	const damagePier = (side: 'W' | 'E', pierX: number, amount: number): void => {
@@ -1434,26 +1460,17 @@ export function GameScene(): Node.Type {
 		const maxHp = gs.pierMaxHp;
 		if (before * 2 > maxHp && after * 2 <= maxHp) refreshEnvironmentVisuals();
 		pierHits[side] += 1;
-		// 砸桥就是报警：锤子一落，岸边的贼船立刻放人（不等入夜）
-		const guards = Math.min(
-			GameConfig.PIER.GUARD_WAVE_MAX,
-			Math.floor(pierHits[side] / GameConfig.PIER.HITS_PER_GUARD)
-		);
+		pierGuardWave(side, GameConfig.PIER.GUARD_PER_HIT);
 		if (after <= 0) {
 			gs.addPierRevenge(side, GameConfig.PIER.REVENGE_COUNT);
 			refreshEnvironmentVisuals();
+			paintPierWreck(side);
 			pierGuardWave(side, GameConfig.PIER.BREAK_GUARD_COUNT);
 			hud.showToast(
 				`【${sideName}滩倭寇码头】栈桥断成两截！${sideName}岸的贼船当场放人抢滩，这一夜的账也用不着等到天黑。`,
 				3.0
 			);
 		} else {
-			if (
-				guards > 0 &&
-				Math.floor((pierHits[side] - 1) / GameConfig.PIER.HITS_PER_GUARD) < guards
-			) {
-				pierGuardWave(side, 1);
-			}
 			hud.showToast(`栈桥 ${after}/${gs.pierMaxHp}，岸上已经有人在放船了。`, 1.4);
 		}
 	};

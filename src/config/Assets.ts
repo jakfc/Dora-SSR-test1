@@ -241,12 +241,12 @@ export const ART: Record<string, ArtSpec> = {
 	'fx_torch_glow': { path: 'assets/sprites/props/fx_torch_glow.png', w: 130, h: 130, stretch: true },
 
 	// 命中 / 施法特效
-	'fx_slash': { path: 'assets/sprites/props/fx_slash.png', w: 110, h: 110, stretch: true },
+	'fx_slash': { path: 'assets/sprites/props/fx_slash.png', w: 33, h: 92, stretch: true, ay: 0.5 },
 	// 投银时从钱袋里浮起的一小串碎银（袋子本体 → 银花上浮 → 飘向升级点）
 	'fx_silver_pouch': { path: 'assets/sprites/props/fx_silver_pouch.png', h: 30 },
 	'fx_silver_rise': { path: 'assets/sprites/props/fx_silver_rise.png', w: 22, h: 30 },
-	'fx_arrow_hit': { path: 'assets/sprites/props/fx_arrow_hit.png', w: 44, h: 44, stretch: true },
-	'fx_cannon_hit': { path: 'assets/sprites/props/fx_cannon_hit.png', w: 60, h: 60, stretch: true },
+	'fx_arrow_hit': { path: 'assets/sprites/props/fx_arrow_hit.png', w: 44, h: 44, stretch: true, ay: 0.5 },
+	'fx_cannon_hit': { path: 'assets/sprites/props/fx_cannon_hit.png', w: 60, h: 60, stretch: true, ay: 0.5 },
 	'fx_recruit': { path: 'assets/sprites/props/fx_recruit.png', h: 200 },
 	'fx_levelup': { path: 'assets/sprites/props/fx_levelup.png', h: 200 },
 

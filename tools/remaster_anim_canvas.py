@@ -44,8 +44,10 @@ FAMILIES = [
 
 ALPHA_CUT = 24
 SCALE_TOLERANCE = 0.05   # 躯干高差 5% 以内不动，免得来回缩
-SCALE_MAX = 1.12         # 单帧最多放大 12%，防止把姿势拉变形
-SCALE_MIN = 0.90
+# 【重要】绝不放大于 1.0：放大后内容会超出画布，被引擎裁掉（「攻击动作被吞一截」的真凶）。
+# 宁可让姿势小幅偏小，也不切掉拳脚。
+SCALE_MAX = 1.00
+SCALE_MIN = 1.00
 HEAD_BAND = 0.30         # 上臂/武器「横向突出」判定用的内容高度比例
 WIDE_RATIO = 1.6
 TORSO_LO, TORSO_HI = 0.35, 0.65   # 躯干（腰胯）竖直区间，用来定中轴
@@ -182,6 +184,9 @@ def process_family(dirrel, prefix, base_stem, log, apply_changes):
         else:
             dx = int(round(cx_ref - (st['torso_cx'] - bx[0]) * s))
         dy = ground - (crop.size[1] - 1)
+        # 贴回时必须整张塞进画布：宁可中轴偏一点，也不能把拳脚切出画布
+        dx = max(0, min(W - crop.size[0], dx))
+        dy = max(0, min(H - crop.size[1], dy))
         out = Image.new('RGBA', (W, H), (0, 0, 0, 0))
         out.paste(crop, (dx, dy), crop)
         over = 0
