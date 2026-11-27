@@ -392,7 +392,11 @@ export function GameScene(): Node.Type {
 		}
 		if (id === 'WEST_PIER' || id === 'EAST_PIER') {
 			const side = id === 'WEST_PIER' ? 'W' : 'E';
-			return gs.pierAlive(side) ? `lm_pier_${side}` : `lm_pier_${side}_broken`;
+			if (!gs.pierAlive(side)) return `lm_pier_${side}_broken`;
+			// 打到一半就换半毁素材，不用等它整座断掉
+			const hp = gs.pierHpOf(side);
+			if (hp * 2 <= gs.pierMaxHp) return `lm_pier_${side}_damaged`;
+			return `lm_pier_${side}`;
 		}
 		if (id === 'WEST_COAST' || id === 'EAST_COAST') return 'lm_coast';
 		const lmCfg = GameConfig.MAP_LANDMARKS[id];
@@ -1389,6 +1393,33 @@ export function GameScene(): Node.Type {
 	 * 砍中码头：砸桥是「攻击行为」，不是「交互」。
 	 * 每刀记 1 点人头债，砍断那一刻再额外记 REVENGE_COUNT——所以拆桥爽一时，当夜还账。
 	 */
+	/** 每侧被砸了几锤（用来算什么时候放人抢滩） */
+	const pierHits: Record<string, number> = { W: 0, E: 0 };
+
+	/**
+	 * 砸栈桥当场招来的抢滩小队：不等天黑，岸边贼船立刻放人往岸上冲。
+	 * 敲得越很，来得越多——拆断那一刻还有 BREAK_GUARD_COUNT 个一起上。
+	 */
+	const pierGuardWave = (side: 'W' | 'E', count: number): void => {
+		const pierX = GameConfig.MAP_LANDMARKS[side === 'W' ? 'WEST_PIER' : 'EAST_PIER'].x;
+		// 从码头再往岸上让一段，免得人卡在栈桥里
+		const off = GameConfig.PIER.GUARD_SPAWN_OFFSET;
+		const shoreX =
+			side === 'W'
+				? Math.min(GameConfig.MAP_WIDTH - 120, pierX + off)
+				: Math.max(120, pierX - off);
+		for (let i = 0; i < count; i++) {
+			const type: EnemyType = i % 3 === 2 ? 'SAMURAI' : 'SCOUT';
+			const enemy = new Enemy(type, shoreX + (side === 'W' ? i * 26 : -i * 26), side);
+			enemies.push(enemy);
+			worldLayer.addChild(enemy.node);
+		}
+		playFx(worldLayer, 'fx_shockwave', shoreX, GameConfig.GROUND_Y + 26, 0.6, 0.6, 0);
+		playFx(worldLayer, 'fx_torch_glow', shoreX, GameConfig.GROUND_Y + 96, 0.9, 0.35, 12);
+		addFloatingText('贼船在放人上岸！', shoreX, GameConfig.GROUND_Y + 140, 0xfffc8181);
+		soundSfx('drum_rally');
+	};
+
 	const damagePier = (side: 'W' | 'E', pierX: number, amount: number): void => {
 		if (!gs.pierAlive(side)) return;
 		const before = gs.pierHpOf(side);
@@ -1399,15 +1430,31 @@ export function GameScene(): Node.Type {
 		pulseArtAtX(pierX, 0.06, 0.22);
 		soundSfx('build_hammer');
 		const sideName = side === 'W' ? '西' : '东';
+		// 血过半：外层换成「半毁」素材，不用等它整座断掉
+		const maxHp = gs.pierMaxHp;
+		if (before * 2 > maxHp && after * 2 <= maxHp) refreshEnvironmentVisuals();
+		pierHits[side] += 1;
+		// 砸桥就是报警：锤子一落，岸边的贼船立刻放人（不等入夜）
+		const guards = Math.min(
+			GameConfig.PIER.GUARD_WAVE_MAX,
+			Math.floor(pierHits[side] / GameConfig.PIER.HITS_PER_GUARD)
+		);
 		if (after <= 0) {
 			gs.addPierRevenge(side, GameConfig.PIER.REVENGE_COUNT);
 			refreshEnvironmentVisuals();
+			pierGuardWave(side, GameConfig.PIER.BREAK_GUARD_COUNT);
 			hud.showToast(
-				`【${sideName}滩倭寇码头】栈桥断成两截！${sideName}岸从此只上散兵，但砍桥的账今夜会来讨。`,
+				`【${sideName}滩倭寇码头】栈桥断成两截！${sideName}岸的贼船当场放人抢滩，这一夜的账也用不着等到天黑。`,
 				3.0
 			);
 		} else {
-			hud.showToast(`栈桥 ${after}/${gs.pierMaxHp}，再砍几下就断。`, 1.4);
+			if (
+				guards > 0 &&
+				Math.floor((pierHits[side] - 1) / GameConfig.PIER.HITS_PER_GUARD) < guards
+			) {
+				pierGuardWave(side, 1);
+			}
+			hud.showToast(`栈桥 ${after}/${gs.pierMaxHp}，岸上已经有人在放船了。`, 1.4);
 		}
 	};
 

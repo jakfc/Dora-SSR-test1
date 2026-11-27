@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Sprite, Vec2 } from 'Dora';
 import { EnemyType, GameConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Villager } from 'src/entities/Villager';
-import { ANIM_FPS, artAnimCount, artAnimInto, artHide, artReady, artStretch } from 'src/config/Assets';
+import { ANIM_FPS, artAnimCount, artAnimFace, artAnimInto, artHide, artReady, artStretch } from 'src/config/Assets';
 import { soundSfx } from 'src/audio/Sound';
 
 function drawRect(
@@ -195,8 +195,8 @@ export class Enemy {
 		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
 		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
 		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
-		// 逐帧图默认朝左；西面来敌整体镜像
-		this.artNode.scaleX = this.dir === 1 ? -1 : 1;
+		// 逐帧图原生朝左（见 Assets.NATIVE_FACE），镜像规则统一走 artAnimFace
+		artAnimFace(this.artNode, styleId, this.dir < 0);
 	}
 
 	public update(dt: number, villagers: Villager[]): void {

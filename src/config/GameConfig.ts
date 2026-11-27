@@ -80,6 +80,11 @@ export interface PierConfig {
 	HIT_DAMAGE: number;
 	HIT_BOX_HALF: number;
 	HIT_REACH: number;
+	/** 砸码头当场招来的抢滩小队（不等到夜里） */
+	HITS_PER_GUARD: number;
+	GUARD_WAVE_MAX: number;
+	BREAK_GUARD_COUNT: number;
+	GUARD_SPAWN_OFFSET: number;
 	// 旧字段（保留兼容）：语义同 SABOTAGE_DAMAGE / REPAIR_AMOUNT，
 	// REPAIR_SILVER 是主角修栈桥一次要花的银两。
 	HIT_HP: number;
@@ -299,7 +304,8 @@ export const GameConfig = {
 	// 倭船就泊在这里。码头被打塌（HP=0）：那一侧只剩散兵零星摸上来；
 	// 只要码头还在，夜暂时那一侧的人就是成建制上岸。
 	PIER: {
-		MAX_HP: 180,
+		// 栈桥是实木桥体，砍起来得费点功夫：520 血 / 一刀 45 ≈ 12 刀才断
+		MAX_HP: 520,
 		// 码头美术相对交互点往海里让多少：让到「栈桥右端正好接上岸线」为止
 		// （岸线 = 西 600 / 东 7000，码头贴图宽 220，所以让 70 刚好贴岸）
 		OFFSET_WEST: 70,
@@ -321,6 +327,14 @@ export const GameConfig = {
 		HIT_BOX_HALF: 96,
 		// 攻击伸出码头的额外距离（出拳的刀刃/冲刺的余势）
 		HIT_REACH: 46,
+		// 每砸中一锤，岸边贼船立刻放人抢滩（不等到夜里）：每 HITS_PER_GUARD 锤出一人
+		HITS_PER_GUARD: 2,
+		// 抢滩小队开局人数上限（拆断前的零碎回击）
+		GUARD_WAVE_MAX: 6,
+		// 拆断那一刻的报复人数（当场就冲上来）
+		BREAK_GUARD_COUNT: 3,
+		// 抢滩小队的出生点相对码头再往岸上让多少（免得生在栈桥里）
+		GUARD_SPAWN_OFFSET: 90,
 		// 旧字段保留（有老代码引用），语义同 SABOTAGE_DAMAGE / REPAIR_AMOUNT
 		HIT_HP: 45,
 		REPAIR_HP: 60,

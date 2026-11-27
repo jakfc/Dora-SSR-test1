@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Vec2 } from 'Dora';
 import { GameConfig, VillagerRole } from 'src/config/GameConfig';
 import { GameState, BuildProject } from 'src/config/GameState';
 import { Enemy } from 'src/entities/Enemy';
-import { ANIM_FPS, artAnimCount, artAnimInto, artHide, artReady } from 'src/config/Assets';
+import { ANIM_FPS, artAnimCount, artAnimFace, artAnimInto, artHide, artReady } from 'src/config/Assets';
 import { soundSfx } from 'src/audio/Sound';
 
 export interface ToolDrop {
@@ -77,6 +77,8 @@ export class Villager {
 	// 逐帧动画状态
 	private animClock = 0;
 	private animPrevX: number;
+	/** 朝向：+1 向右，-1 向左。由实际位移推出，走路时转身 */
+	private facing = 1;
 
 	constructor(startX: number, role: VillagerRole = 'IDLE') {
 		this.id = Villager.nextId++;
@@ -183,7 +185,9 @@ export class Villager {
 
 	/** 每帧推进角色动画：按当前动作挑前缀，缺帧时逐级回退。 */
 	private tickAnim(dt: number): void {
-		const moving = Math.abs(this.x - this.animPrevX) > 0.5;
+		const dx = this.x - this.animPrevX;
+		const moving = Math.abs(dx) > 0.5;
+		if (moving) this.facing = dx > 0 ? 1 : -1;
 		this.animPrevX = this.x;
 		let name = 'idle';
 		if (this.attackTimer > 0) name = 'attack';
@@ -228,6 +232,8 @@ export class Villager {
 		const offset = this.id % Math.max(1, frames);
 		const frame = name === 'walk' ? this.animClock * fps + offset : offset;
 		artAnimInto(this.artNode, styleId, prefix, frame);
+		// 村民也要转身：以前这里的挂点从不镜像，向左走的人一直倒着走
+		artAnimFace(this.artNode, styleId, this.facing < 0);
 	}
 
 	private moveToward(targetX: number, dt: number, speedScale = 1): boolean {

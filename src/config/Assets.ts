@@ -120,6 +120,8 @@ export const PERSON_TARGET: Record<string, number> = {
 	// 栈桥是低矮的水上平台：连桩带面 2 人高（比人高一点，人才走得上去）
 	'lm_pier_W': 2.05,
 	'lm_pier_E': 2.05,
+	'lm_pier_W_damaged': 2.05,
+	'lm_pier_E_damaged': 2.05,
 	'lm_pier_W_broken': 2.05,
 	'lm_pier_E_broken': 2.05,
 };
@@ -206,6 +208,9 @@ export const ART: Record<string, ArtSpec> = {
 	// 码头：id 必须跟 GameScene 的 `lm_pier_${side}` 对上（side 是 W/E）
 	'lm_pier_W': { path: 'assets/buildings/b13_pier.png', w: 150 },
 	'lm_pier_E': { path: 'assets/buildings/b13_pier.png', w: 150 },
+	// 半毁：桥板拒起、栏杆断一截、桩子斜了——打到一半就能看出来
+	'lm_pier_W_damaged': { path: 'assets/buildings/b13_pier_damaged.png', w: 150 },
+	'lm_pier_E_damaged': { path: 'assets/buildings/b13_pier_damaged.png', w: 150 },
 	'lm_pier_W_broken': { path: 'assets/buildings/b13_pier_broken.png', w: 150 },
 	'lm_pier_E_broken': { path: 'assets/buildings/b13_pier_broken.png', w: 150 },
 
@@ -441,13 +446,32 @@ export function artInto(holder: Node.Type, id: string, mirror?: Node.Type): Spri
 	return holder.getChildByTag('art') as Sprite.Type | undefined;
 }
 
-/** 让精灵按朝向镜像（自动遵守素材的 flipX 约定）。 */
-export function artFace(sprite: Sprite.Type, id: string, facingLeft: boolean): void {
+/**
+ * 素材的「原生朝向」：+1 = 这张图生成出来就朝右，-1 = 朝左。
+ * 规范（docs/美术素材清单与AI生成规范.md）要求角色一律朝右，但倭寇是照左画的、
+ * 盐工那张也出成了朝左。把差异集中在这里，实体代码就不需要各自猜方向。
+ * 如果游戏里发现某个角色走路倒着走，只改这一张表即可。
+ */
+export const NATIVE_FACE: Record<string, number> = {
+	'villager_SALT_WORKER': -1,
+	'enemy_SCOUT': -1,
+	'enemy_SAMURAI': -1,
+	'enemy_BOSS': -1,
+};
+
+/** 镜像基准：+1 = 素材原本朝右（facingLeft 时要翻），-1 = 原本朝左（facingLeft 时不翻）。 */
+function flipBaseOf(id: string): number {
 	const spec = ART[id];
-	const base = spec !== undefined && spec.flipX === true ? -1 : 1;
-	sprite.scaleX = facingLeft ? -base : base;
+	const flipped = spec !== undefined && spec.flipX === true ? -1 : 1;
+	const native = NATIVE_FACE[id] !== undefined ? NATIVE_FACE[id] : 1;
+	return flipped * native;
 }
 
+/** 让精灵按朝向镜像（自动遵守素材的 flipX 约定与原生朝向）。 */
+export function artFace(sprite: Sprite.Type, id: string, facingLeft: boolean): void {
+	const base = flipBaseOf(id);
+	sprite.scaleX = facingLeft ? -base : base;
+}
 /** 隐藏一个美术挂点（例如特效结束）。 */
 export function artHide(holder: Node.Type): void {
 	if (holder.tag !== '') {
@@ -621,8 +645,7 @@ export function artAnimInto(
  * 自动遵守素材的 flipX 约定。
  */
 export function artAnimFace(holder: Node.Type, styleId: string, facingLeft: boolean): void {
-	const spec = ART[styleId];
-	const base = spec !== undefined && spec.flipX === true ? -1 : 1;
+	const base = flipBaseOf(styleId);
 	holder.scaleX = facingLeft ? -base : base;
 }
 
