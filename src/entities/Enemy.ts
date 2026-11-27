@@ -2,7 +2,7 @@ import { Color, DrawNode, Label, Node, Sprite, Vec2 } from 'Dora';
 import { EnemyType, GameConfig } from 'src/config/GameConfig';
 import { GameState } from 'src/config/GameState';
 import { Villager } from 'src/entities/Villager';
-import { ANIM_FPS, artAnimCount, artAnimFace, artAnimInto, artHide, artReady, artStretch } from 'src/config/Assets';
+import { ANIM_FPS, artAnimCount, artAnimInto, artHide, artReady, artStretch } from 'src/config/Assets';
 import { soundSfx } from 'src/audio/Sound';
 
 function drawRect(
@@ -30,6 +30,8 @@ export class Enemy {
 	/** 登岸方向：'E' 从东海（右）上岸向左推进，'W' 从西湾（左）上岸向右推进 */
 	public readonly side: 'W' | 'E';
 	/** 推进方向（-1 向左，+1 向右），登岸点到宗祠的方向 */
+	/** 朝向：看实际位移，true = 朝右 */
+	private faceRight = false;
 	public readonly dir: number;
 	public readonly node: Node.Type;
 	private readonly bodyDraw: DrawNode.Type;
@@ -166,15 +168,20 @@ export class Enemy {
 	private tickAnim(dt: number): void {
 		const styleId = `enemy_${this.type}`;
 		const base = `enemy_${this.type.toLowerCase()}`;
+		// 朝向看「这一帧往哪边挪」而不是出生侧：追击散兵会回头、退散会往海里跑，
+		// 只看出生侧就会全程倒着走。
+		const moveDx = this.x - this.animPrevX;
+		const moving = Math.abs(moveDx) > 0.5;
+		if (Math.abs(moveDx) > 0.2) this.faceRight = moveDx > 0;
+		this.animPrevX = this.x;
 		let name = 'idle';
 		if (this.dead) {
 			name = 'fall';
 		} else if (this.attackTimer > 0) {
 			name = 'attack';
-		} else if (Math.abs(this.x - this.animPrevX) > 0.5) {
+		} else if (moving) {
 			name = 'walk';
 		}
-		this.animPrevX = this.x;
 
 		// 站立帧的命名是 `enemy_<type>_NN.png`（不带动作词），移动/出手/倒地才是 `_walk` / `_attack` / `_fall`
 		let prefix = name === 'idle' ? base : `${base}_${name}`;
@@ -194,9 +201,12 @@ export class Enemy {
 		// 动画时钟不走 GAME_SPEED 的减速，和族丁/主角一致，保持步伐颚率
 		this.animClock += dt * GameConfig.ANIM_TIME_SCALE;
 		const fps = ANIM_FPS[name] !== undefined ? ANIM_FPS[name] : 6;
+		// 朝右有专门画好的帧（`*_r_NN`）就直接用：左右各一套贴图，比整体镜像干净
+		const useRightArt = this.faceRight && artAnimCount(styleId, `${prefix}_r`) > 0;
+		if (useRightArt) prefix = `${prefix}_r`;
 		artAnimInto(this.artNode, styleId, prefix, this.animClock * fps);
-		// 逐帧图原生朝左（见 Assets.NATIVE_FACE），镜像规则统一走 artAnimFace
-		artAnimFace(this.artNode, styleId, this.dir < 0);
+		// 主图原生朝左：用左套图时朝右要翻；用右套图（原生朝右）时不翻
+		this.artNode.scaleX = useRightArt ? 1 : this.faceRight ? -1 : 1;
 	}
 
 	public update(dt: number, villagers: Villager[]): void {
