@@ -387,25 +387,39 @@ export class HudLayer {
 	private layout(): void {
 		// HUD 属于 UI 空间：单位就是设计单位，镜头拉近也不会把界面一起放大
 		Screen.attachUi(this.node);
+		// 横跨整块屏幕的底板用真实尺寸 w
 		const w = Screen.uiWidth;
 		const h = Screen.uiHeight;
+
+		// 内容安全框：永远是居中的 1280x720 设计比例，随分辨率自动缩放。
+		// 超宽屏（例如 3440x1369 的 2.5:1）时 uiWidth 会远大于设计宽 1280，
+		// 以前直接拿 uiWidth 当「内容宽」排布，左侧信息与右侧资源就被推到屏幕
+		// 两个角上——看起来就是「不居中、到处偏移」。现在内容一律排在这个框里，
+		// 只有顶/底栏底板横跨全屏。
+		const bx = Screen.uiBoxX;
+		const bw = Screen.uiBoxW;
+		const by = Screen.uiBoxY;
+		const bh = Screen.uiBoxH;
+		const right = w;
+		const cx = bx + bw / 2;
+		const topY = by + bh;
 
 		// 顶栏
 		this.topBg.clear();
 		if (this.topBarArt === undefined) {
-			drawRect(this.topBg, 0, h - TOP_BAR_HEIGHT, w, TOP_BAR_HEIGHT, 0xcc1a202c);
-			drawRect(this.topBg, 0, h - 2, w, 2, 0xff4a5568);
+			drawRect(this.topBg, 0, topY - TOP_BAR_HEIGHT, w, TOP_BAR_HEIGHT, 0xcc1a202c);
+			drawRect(this.topBg, 0, topY - 2, w, 2, 0xff4a5568);
 		} else {
 			this.topBarArt.x = 0;
-			this.topBarArt.y = h - TOP_BAR_HEIGHT;
+			this.topBarArt.y = topY - TOP_BAR_HEIGHT;
 			this.topBarArt.size = Size(w, TOP_BAR_HEIGHT);
 		}
 
-		const rowY = h - 22;
+		const rowY = topY - 22;
 		this.topLabel.x = 20;
 		this.topLabel.y = rowY;
 		this.statusLabel.x = 20;
-		this.statusLabel.y = h - 46;
+		this.statusLabel.y = topY - 46;
 
 		// 第一行右侧：白银 / 粮草 / 族丁（图标 + 数字）
 		const setIcon = (ic: Sprite.Type | undefined, x: number, y: number) => {
@@ -437,45 +451,48 @@ export class HudLayer {
 
 		this.skipDayBtn.x = w - 130;
 		// 提前入夜挪进顶栏里：以前贴在 h-50（顶栏下面），正好压住建筑名
-		this.skipDayBtn.y = h - 32;
+		this.skipDayBtn.y = topY - 32;
 
-		this.toastLabel.x = w / 2;
-		this.toastLabel.y = h - 102;
+		this.toastLabel.x = cx;
+		this.toastLabel.y = topY - 102;
 
 		this.workLabel.x = 20;
-		this.workLabel.y = h - TOP_BAR_HEIGHT - 56;
+		this.workLabel.y = topY - TOP_BAR_HEIGHT - 56;
 		// 左侧信息栏底板：包住读秒 / 交互提示 / 按键说明三行
 		this.leftPanel.clear();
-		const panelTop = h - TOP_BAR_HEIGHT - 8;
-		const panelBottom = h - TOP_BAR_HEIGHT - 140;
-		drawRect(this.leftPanel, 8, panelBottom, 420, panelTop - panelBottom, 0x8f0d1620);
+		const panelTop = topY - TOP_BAR_HEIGHT - 8;
+		const panelBottom = topY - TOP_BAR_HEIGHT - 140;
+		const panelW = Math.min(420, bw - 16);
+		drawRect(this.leftPanel, 8, panelBottom, panelW, panelTop - panelBottom, 0x8f0d1620);
 		drawRect(this.leftPanel, 8, panelBottom, 3, panelTop - panelBottom, 0xff4a5568);
-		this.alertLabel.x = w / 2;
-		this.alertLabel.y = h - 132;
-		this.alertLabel.textWidth = w - 80;
+		this.alertLabel.x = cx;
+		this.alertLabel.y = topY - 132;
+		this.alertLabel.textWidth = bw - 80;
 
 		// 底部操作条
 		this.bottomBg.clear();
 		if (this.bottomBarArt === undefined) {
-			drawRect(this.bottomBg, 0, 0, w, BOTTOM_BAR_HEIGHT, 0xcc1a202c);
-			drawRect(this.bottomBg, 0, BOTTOM_BAR_HEIGHT - 2, w, 2, 0xff4a5568);
+			drawRect(this.bottomBg, 0, by, w, BOTTOM_BAR_HEIGHT, 0xcc1a202c);
+			drawRect(this.bottomBg, 0, by + BOTTOM_BAR_HEIGHT - 2, w, 2, 0xff4a5568);
 		} else {
+			this.bottomBarArt.x = 0;
+			this.bottomBarArt.y = by;
 			this.bottomBarArt.size = Size(w, BOTTOM_BAR_HEIGHT);
 		}
 
 		this.hintLabel.x = 20;
-		this.hintLabel.y = h - TOP_BAR_HEIGHT - 92;
+		this.hintLabel.y = topY - TOP_BAR_HEIGHT - 92;
 		this.hintIconNode.x = 16;
-		this.hintIconNode.y = h - TOP_BAR_HEIGHT - 92;
+		this.hintIconNode.y = topY - TOP_BAR_HEIGHT - 92;
 		if (this.hintIconNode.visible) this.hintLabel.x = 48;
 		// 底栏没了，按键提示也不能压在水面上：跟左边一列信息排在一起
 		this.controlsLabel.x = 20;
-		this.controlsLabel.y = h - TOP_BAR_HEIGHT - 124;
+		this.controlsLabel.y = topY - TOP_BAR_HEIGHT - 124;
 
-		// BOSS 血条：随窗口宽度自适应，居中贴在顶栏下方
-		this.bossWidth = Math.min(600, w - 240);
-		this.bossBar.x = w / 2;
-		this.bossBar.y = h - TOP_BAR_HEIGHT - 30;
+		// BOSS 血条：随安全框宽度自适应，居中贴在顶栏下方
+		this.bossWidth = Math.min(600, bw - 240);
+		this.bossBar.x = cx;
+		this.bossBar.y = topY - TOP_BAR_HEIGHT - 30;
 		if (this.bossBgArt !== undefined) {
 			this.bossBgArt.size = Size(this.bossWidth, 24);
 			this.bossBgArt.x = -this.bossWidth / 2;
@@ -483,7 +500,7 @@ export class HudLayer {
 
 		// 底栏取消后，技能键改到右上角竖排，下方整条水面留空给倒影
 		const skillGap = 8;
-		let skillY = h - TOP_BAR_HEIGHT - 12 - 38;
+		let skillY = topY - TOP_BAR_HEIGHT - 12 - 38;
 		for (let i = 0; i < this.skillButtons.length; i++) {
 			const skillBtn = this.skillButtons[i];
 			const btnW = skillBtn.size.width > 0 ? skillBtn.size.width : 92;
@@ -497,13 +514,13 @@ export class HudLayer {
 		}
 
 		this.extraActionNode.x = 20;
-		this.extraActionNode.y = h - TOP_BAR_HEIGHT - 12;
+		this.extraActionNode.y = topY - TOP_BAR_HEIGHT - 12;
 
-		// 胜利战报弹窗
-		const boxW = Math.min(700, w - 60);
-		const boxH = Math.min(380, h - 100);
-		const boxX = (w - boxW) / 2;
-		const boxY = (h - boxH) / 2;
+		// 胜利战报弹窗（永远在安全框正中）
+		const boxW = Math.min(700, bw - 60);
+		const boxH = Math.min(380, bh - 100);
+		const boxX = bx + (bw - boxW) / 2;
+		const boxY = by + (bh - boxH) / 2;
 
 		this.modalDim.clear();
 		drawRect(this.modalDim, 0, 0, w, h, 0xaa000000);
@@ -517,15 +534,14 @@ export class HudLayer {
 			this.modalArt.size = Size(boxW, boxH);
 		}
 
-		this.victoryTitleLabel.x = w / 2;
+		this.victoryTitleLabel.x = cx;
 		this.victoryTitleLabel.y = boxY + boxH - 60;
-		this.victoryBodyLabel.x = w / 2;
+		this.victoryBodyLabel.x = cx;
 		this.victoryBodyLabel.y = boxY + boxH / 2 - 5;
 		this.victoryBodyLabel.textWidth = boxW - 100;
-		this.confirmBtn.x = w / 2 - 110;
+		this.confirmBtn.x = cx - 110;
 		this.confirmBtn.y = boxY + 30;
 	}
-
 	public showToast(msg: string, duration = 3.0): void {
 		this.toastLabel.text = msg;
 		this.toastLabel.visible = true;

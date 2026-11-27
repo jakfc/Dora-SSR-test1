@@ -17,7 +17,8 @@ import { GameConfig } from 'src/config/GameConfig';
  * 用法：
  *   - 每帧调用 Screen.sync()（SceneManager.tick 里已挂）；
  *   - 世界布局读 Screen.width / height / offsetX / offsetY；
- *   - UI 布局读 Screen.uiWidth / uiHeight / uiOffsetX / uiOffsetY，
+ *   - UI 布局读 Screen.uiWidth / uiHeight 以及 **内容安全框
+ *     Screen.uiBoxX / uiBoxY / uiBoxW / uiBoxH**（居中、按 1280x720 比例、随分辨率自动缩放），
  *     并在自己节点上调用 Screen.attachUi(node)。
  */
 export class Screen {
@@ -95,6 +96,50 @@ export class Screen {
 	/** 1280x720 设计框在 UI 空间中的垂直偏移（居中） */
 	public static get uiOffsetY(): number {
 		return (Screen.uiHeight - GameConfig.SCREEN_HEIGHT) / 2;
+	}
+
+	/**
+	 * UI 内容安全框（左上角 X）。
+	 *
+	 * 这是一块**始终按 1280x720 设计比例居中**的矩形，随分辨率自动缩放：
+	 *   - 窗口比设计更宽（超宽屏）时，框比 UI 空间窄，左右自动留白；
+	 *   - 窗口比设计更窄时，框顶到边界，不会越出屏幕。
+	 *
+	 * HUD 的**内容**（文字、图标、面板、弹窗）都排在这个框里；
+	 * 只有顶栏/底栏的底板横跨整块屏幕（用 uiWidth）。
+	 *
+	 * 为什么要这样：`uiWidth = 窗口宽 / uiZoom`，而 uiZoom = min(宽/1280, 高/720)，
+	 * 所以 3440x1369 这种 2.5:1 的窗口 uiWidth ≈ 1809。以前直接拿 uiWidth 当
+	 * 「内容宽」排布，左侧信息与右侧资源就各自贴到屏幕两个角上（相隔 1800 单位），
+	 * 看起来就是「不居中、到处偏移」。
+	 */
+	public static get uiBoxX(): number {
+		return Math.max(0, Screen.uiOffsetX);
+	}
+
+	/** UI 内容安全框（下边缘 Y） */
+	public static get uiBoxY(): number {
+		return Math.max(0, Screen.uiOffsetY);
+	}
+
+	/** UI 内容安全框的宽（不超过设计宽 1280） */
+	public static get uiBoxW(): number {
+		return Math.min(Screen.uiWidth, GameConfig.SCREEN_WIDTH);
+	}
+
+	/** UI 内容安全框的高（不超过设计高 720） */
+	public static get uiBoxH(): number {
+		return Math.min(Screen.uiHeight, GameConfig.SCREEN_HEIGHT);
+	}
+
+	/** UI 内容安全框的右边缘 */
+	public static get uiBoxRight(): number {
+		return Screen.uiBoxX + Screen.uiBoxW;
+	}
+
+	/** UI 内容安全框的水平中心（= 屏幕中心） */
+	public static get uiBoxCenterX(): number {
+		return Screen.uiBoxX + Screen.uiBoxW / 2;
 	}
 
 	/**
